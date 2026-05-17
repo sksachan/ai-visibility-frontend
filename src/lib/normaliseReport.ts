@@ -230,6 +230,9 @@ function mapQueries(prPayload: AnyRecord): QueryDiagnostic[] {
       sourceType: winningTypes[0] ?? 'Not available',
       citationLikelihood: Math.round(Math.min(100, Math.max(0, extScore || asNumber(row.ai_visibility_score)))),
       confidence: Math.round(Math.min(100, Math.max(0, Math.abs(extScore - ownedScore) + 50))),
+      aiVisibilityScore: asNumber(row.ai_visibility_score),
+      competitorBrands,
+      competitorCitationCount: asNumber(row.competitor_citation_count, competitorBrands.length),
       issue: gapReasons[0] ?? (queryType ? `${queryType} query with ${statusText} visibility` : 'No query-level gap reason supplied'),
       recommendedMove: statusText.includes('competitor')
         ? 'Create owned answer block and comparative evidence for this query.'
@@ -354,15 +357,33 @@ function makeActions(cmsModules: RecommendationModule[], prModules: Recommendati
 function mapActionChecklist(raw: unknown): ActionItem[] {
   const source = asRecord(raw);
   const rows = asArray<AnyRecord>(Array.isArray(raw) ? raw : firstDefined(source.items, source.action_checklist, source.actions));
-  return rows.map((item): ActionItem => ({
-    action: asString(firstDefined(item.action, item.recommendation, item.task), 'No action text supplied'),
-    owner: asString(firstDefined(item.owner, item.workstream), 'Unassigned'),
-    priority: priority(item.priority),
-    effort: effort(item.effort),
-    status: status(item.status),
-    dependency: asString(firstDefined(item.dependency, asArray<string>(item.target_source_types).join(', '), item.brand_topic_category, item.page_url), ''),
-    source: asString(firstDefined(item.workstream, item.source), 'Action Checklist Generator')
-  }));
+  return rows.map((item): ActionItem => {
+    const workstream = asString(firstDefined(item.workstream, item.source), 'Action Checklist Generator');
+    const targetTypes = asArray<string>(item.target_source_types);
+    const target = asString(firstDefined(item.page_url, targetTypes.join(', '), item.target, item.target_url), '');
+    const category = asString(firstDefined(item.brand_topic_category, item.journey_category, item.category), '');
+    const rawAction = asString(firstDefined(item.action, item.recommendation, item.task), 'No action text supplied');
+    const isGenericCms = rawAction.toLowerCase().includes('page-specific') && !!target;
+    const isGenericPr = rawAction.toLowerCase().includes('third-party-referenceable') && targetTypes.length;
+    const action = isGenericCms
+      ? `Create answer-first module for ${target.split('/').filter(Boolean).slice(-3).join(' / ')}`
+      : isGenericPr
+        ? `Create authority proof assets for ${targetTypes.join(', ')}`
+        : rawAction;
+    return {
+      action,
+      owner: asString(firstDefined(item.owner, item.workstream), 'Unassigned'),
+      priority: priority(item.priority),
+      effort: effort(item.effort),
+      status: status(item.status),
+      dependency: asString(firstDefined(item.dependency, category, targetTypes.join(', ')), ''),
+      source: workstream,
+      workstream,
+      category,
+      target,
+      targetSourceTypes: targetTypes
+    };
+  });
 }
 
 function mapFrontendPreviewBundle(source: AnyRecord): ReportBundle | null {
@@ -480,9 +501,140 @@ function mapFrontendPreviewBundle(source: AnyRecord): ReportBundle | null {
   };
 }
 
+
 function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
-  if (!source.executive || !source.visibility || !Array.isArray(source.queries)) return null;
-  return source as ReportBundle;
+  const queryWorkbench = asArray<AnyRecord>(source.query_workbench);
+  if (!queryWorkbench.length) {
+    if (source.executive && source.visibility && Array.isArray(source.queries)) return source as ReportBundle;
+    return null;
+  }
+  const brand = asString(source.brand, 'Unknown brand');
+  const market = asString(source.market, 'Unknown market');
+  const kpis = asRecord(asRecord(source.executive).headline_metrics);
+  const sourceLandscape = asRecord(source.source_landscape);
+  const sourceTypeCounts = asArray<AnyRecord>(sourceLandscape.source_type_counts).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), count: asNumber(item.count) }));
+  const citationsToUi = (items: AnyRecord[]): CitationExample[] => items.map((item) => ({
+    title: asString(firstDefined(item.title, item.source_name, item.name), 'Untitled source'),
+    url: asString(firstDefined(item.url, item.source_url, item.link), ''),
+    domain: asString(firstDefined(item.domain, item.source_domain), ''),
+    sourceType: asString(firstDefined(item.sourceType, item.source_type), 'unknown'),
+    citationPosition: asNumber(firstDefined(item.citationPosition, item.citation_position, item.rank), undefined as unknown as number),
+    snippet: asString(firstDefined(item.snippet, item.text, item.summary), ''),
+    isCompetitor: bool(item.is_competitor),
+    isOwnedTargetPage: bool(firstDefined(item.isOwnedTargetPage, item.is_owned_target_page, item.is_owned))
+  }));
+  const queries: QueryDiagnostic[] = queryWorkbench.map((row, index) => {
+    const vis = asRecord(row.current_ai_visibility);
+    const topCitations = citationsToUi(asArray<AnyRecord>(vis.top_citations));
+    const externalTop3 = citationsToUi(asArray<AnyRecord>(row.external_top3_benchmark));
+    const citations = topCitations.length ? topCitations : externalTop3;
+    const competitors = asArray<string>(vis.competitors);
+    const winningTypes = Array.from(new Set([...externalTop3.map((x) => x.sourceType), ...citations.map((x) => x.sourceType)].filter(Boolean))).slice(0, 8);
+    const mapped = asArray<AnyRecord>(row.mapped_owned_urls);
+    return {
+      id: asString(row.query_id, `q${String(index + 1).padStart(3, '0')}`),
+      query: asString(row.query, 'Query not supplied'),
+      journey: asString(row.journey_category, 'Unclassified'),
+      visibilityStatus: asString(vis.status, 'not_observed'),
+      ownedTargetPageCited: bool(vis.owned_target_cited),
+      ownedDomainCited: bool(vis.owned_domain_cited),
+      winningExternalSourceTypes: winningTypes,
+      ownedGeoScore120: mapped.length ? Math.round(mapped.reduce((sum, item) => sum + asNumber(item.current_geo_score_120), 0) / mapped.length) : 0,
+      externalBenchmarkScore: externalTop3.length ? externalTop3.length * 20 : 0,
+      sourcePreferenceGap: 0,
+      gapReasons: asArray<AnyRecord>(row.winning_patterns).map((p) => asString(firstDefined(p.owned_content_implication, p.pattern_type))).filter(Boolean),
+      citations,
+      brandPosition: bool(vis.owned_target_cited) ? 1 : bool(vis.owned_domain_cited) ? 3 : 0,
+      leadingCompetitor: competitors[0] ?? 'No competitor source flagged',
+      leadingPublisher: leadingDomain(citations),
+      sourceType: winningTypes[0] ?? 'unknown',
+      citationLikelihood: asNumber(vis.score),
+      confidence: 80,
+      aiVisibilityScore: asNumber(vis.score),
+      competitorBrands: competitors,
+      competitorCitationCount: asNumber(vis.competitor_citation_count, competitors.length),
+      issue: bool(vis.owned_target_cited) ? 'Owned target page is cited for this query.' : 'Owned target page is not yet cited for this query.',
+      recommendedMove: asArray<AnyRecord>(row.cms_recommendations)[0]?.recommendation ?? 'Apply mapped owned-page CMS and PR recommendations.'
+    };
+  });
+  const ownedMap = new Map<string, OwnedPage>();
+  queryWorkbench.forEach((row) => {
+    asArray<AnyRecord>(row.mapped_owned_urls).forEach((item) => {
+      const url = asString(item.url);
+      if (!url) return;
+      const dims = asRecord(item.geo_dimensions);
+      const existing = ownedMap.get(url);
+      const related = { id: asString(row.query_id), query: asString(row.query), visibilityStatus: asString(asRecord(row.current_ai_visibility).status) };
+      if (existing) {
+        existing.relatedQueries.push(related);
+        return;
+      }
+      ownedMap.set(url, {
+        url,
+        title: asString(item.title),
+        journeyCategory: asString(row.journey_category, 'Unclassified'),
+        mappedQuery: asString(row.query),
+        relatedQueries: [related],
+        geoScore: asNumber(item.current_geo_score_120),
+        clarity: asNumber(firstDefined(dims.answer_clarity, dims.content_clarity)),
+        semanticDepth: asNumber(firstDefined(dims.semantic_depth)),
+        evidence: asNumber(firstDefined(dims.evidence_and_proof, dims.evidence)),
+        structure: asNumber(firstDefined(dims.structured_extractability, dims.structured_data)),
+        freshness: asNumber(dims.freshness),
+        authority: asNumber(firstDefined(dims.evidence_and_proof, dims.authority, dims.eeat_signals)),
+        faqReadiness: asNumber(dims.faq_readiness),
+        diagnostics: asArray<string>(item.geo_gaps),
+        recommendedHtmlChanges: asArray<string>(item.recommended_update_focus)
+      });
+    });
+  });
+  const mapCms = (item: AnyRecord): RecommendationModule => ({
+    title: asString(item.title, 'CMS recommendation'),
+    targetUrl: asString(firstDefined(item.targetUrl, item.target_url)),
+    recommendation: asString(item.recommendation),
+    evidencePattern: asString(firstDefined(item.evidencePattern, item.winning_pattern_to_copy, item.evidence_basis)),
+    priority: priority(item.priority),
+    owner: asString(item.owner, 'AEM/CMS'),
+    journeyCategory: asString(item.journey_category),
+    moduleType: asString(firstDefined(item.moduleType, item.module_type)),
+    placement: asString(item.placement),
+    bulletPoints: asArray<string>(item.content_requirements),
+    validationRequired: asArray<string>(item.validation_required),
+    whyItMatters: asString(item.why_it_matters),
+    evidenceBasis: asString(item.evidence_basis),
+    targetSourceTypes: asArray<string>(item.target_source_types)
+  });
+  const cmsModules = asArray<AnyRecord>(source.cms_recommendations).map(mapCms);
+  const prOpportunities = asArray<AnyRecord>(source.pr_opportunities).map(mapCms);
+  const actionChecklist = asArray<AnyRecord>(source.action_checklist).map((item) => ({
+    action: asString(item.action), owner: asString(item.owner), priority: priority(item.priority), effort: effort(item.effort), status: status(item.status), dependency: asString(item.dependency), source: asString(item.source), target: asString(item.target), workstream: asString(item.workstream), category: asString(item.category), targetSourceTypes: asArray<string>(item.target_source_types)
+  }));
+  const headline = asRecord(asRecord(source.executive).headline_metrics);
+  const queryCount = asNumber(firstDefined(headline.query_count, kpis.query_count), queries.length);
+  const ownedTargetCitations = asNumber(firstDefined(headline.owned_target_page_citations, kpis.owned_target_page_citations));
+  const ownedDomainCitations = asNumber(firstDefined(headline.owned_domain_citations, kpis.owned_domain_citations));
+  const competitorLedQueries = asNumber(firstDefined(headline.competitor_led_query_count, kpis.competitor_led_query_count));
+  const externalLedQueries = asNumber(firstDefined(headline.external_led_query_count, kpis.external_led_query_count));
+  const brandScore = asNumber(firstDefined(headline.ai_visibility_score, headline.average_ai_visibility_score, kpis.ai_visibility_score));
+  return {
+    runId: asString(source.run_id, 'uploaded_query_workbench'),
+    brand,
+    market,
+    generatedAt: asString(source.generated_at, new Date().toISOString()),
+    evidenceDate: asString(source.generated_at, new Date().toISOString()).slice(0, 10),
+    executive: {
+      summary: asString(asRecord(source.executive).summary, 'No executive summary supplied.'),
+      whatIsHappening: textToList(asRecord(source.executive).what_is_happening),
+      whyNow: textToList(asRecord(source.executive).why_now),
+      priorityActions: textToList(asRecord(source.executive).priority_actions),
+      methodologyCaveats: textToList(asRecord(source.methodology).refresh_policy),
+      headlineMetrics: { brandScore, ownedTargetCitations, ownedDomainCitations, competitorLedQueries, externalLedQueries, queryCount, ownedPageCount: ownedMap.size, externalSourceCount: asNumber(headline.external_source_count), averageOwnedGeoScore120: asNumber(headline.average_owned_geo_score_120) }
+    },
+    visibility: { brandScore, ownedTargetCitations, ownedDomainCitations, competitorLedQueries, externalLedQueries, brandVsCompetitors: [] },
+    sourceLandscape: { sourceTypeCounts, observedNonOwnedDomains: [], winningSourcePatterns: asArray<AnyRecord>(source.source_landscape?.winning_source_patterns).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), citationCount: asNumber(firstDefined(item.citationCount, item.citation_count)), winningPattern: asString(firstDefined(item.winningPattern, item.winning_pattern)) })) },
+    trend: [], queries, ownedPages: Array.from(ownedMap.values()), cmsModules, prOpportunities, actionChecklist, queryWorkbench: queryWorkbench as any,
+    parserMeta: { source: 'canonical-report', parsedAt: new Date().toISOString(), queryCount: queries.length, ownedPageCount: ownedMap.size, cmsModuleCount: cmsModules.length, prOpportunityCount: prOpportunities.length, actionCount: actionChecklist.length, warnings: [] }
+  };
 }
 
 export function normaliseReport(raw: unknown): ReportBundle {

@@ -79,3 +79,16 @@ That JSON should contain `schema_version: "frontend_report_bundle_v1_preview_con
 ## v5 parser fixes
 
 This build is aligned to the Bodhi Preview Node `frontend_report_bundle` contract. It parses stringified executive and PR JSON, enriches query cards with the embedded source-preference benchmark rows, derives observed domain cards from `source_landscape.sources`, reads winning source patterns from `visibility.external_benchmark_patterns`, and uses the explicit embedded `action_checklist` items.
+
+
+## Query workbench canonical bundle
+
+The preferred upload/API payload is now `frontend_report_bundle.json` with schema `query_workbench.v1`.
+
+The dashboard still supports older Bodhi Preview Node outputs, but the intended seamless flow is:
+
+```text
+Railway /runs/latest/report-bundle -> frontend normaliseReport -> Query workbench tab + executive/drilldowns
+```
+
+Set `VITE_EVIDENCE_SERVICE_URL` to the Railway evidence service URL.

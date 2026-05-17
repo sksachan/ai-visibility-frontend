@@ -1,45 +1,51 @@
-import { mockReport } from '../data/mockReport';
-import type { ReportBundle } from '../types/report';
 import { normaliseReport } from './normaliseReport';
+import type { ReportBundle } from '../types/report';
 
-const API_BASE_URL = import.meta.env.VITE_EVIDENCE_API_BASE_URL as string | undefined;
-
-async function fetchJson<T>(path: string): Promise<T> {
-  if (!API_BASE_URL) throw new Error('VITE_EVIDENCE_API_BASE_URL is not configured');
-  const response = await fetch(`${API_BASE_URL}${path}`);
-  if (!response.ok) throw new Error(`API request failed: ${response.status}`);
-  return response.json() as Promise<T>;
-}
+const evidenceServiceUrl = import.meta.env.VITE_EVIDENCE_SERVICE_URL || import.meta.env.VITE_API_BASE_URL || '';
 
 export async function fetchLatestReport(brand: string, market: string): Promise<ReportBundle> {
-  if (!API_BASE_URL) return mockReport;
-
-  const latest = await fetchJson<{ run_id?: string; runId?: string }>(
-    `/runs/latest?brand=${encodeURIComponent(brand)}&market=${encodeURIComponent(market)}`
-  );
-  const runId = latest.run_id ?? latest.runId;
-  if (!runId) throw new Error('Latest run response did not include run_id');
-  const dashboard = await fetchJson<unknown>(`/runs/${encodeURIComponent(runId)}/dashboard`);
-  return normaliseReport(dashboard);
+  if (!evidenceServiceUrl) {
+    throw new Error('VITE_EVIDENCE_SERVICE_URL is not configured. Upload a report JSON or configure Railway evidence service.');
+  }
+  const base = evidenceServiceUrl.replace(/\/$/, '');
+  const params = new URLSearchParams({ brand, market });
+  const urls = [
+    `${base}/runs/latest/report-bundle?${params.toString()}`,
+    `${base}/runs/latest/bodhi-compact?${params.toString()}`,
+    `${base}/runs/latest/compact?${params.toString()}`,
+    `${base}/runs/latest?${params.toString()}`,
+  ];
+  let lastError = '';
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!response.ok) {
+        lastError = `${response.status} ${response.statusText}`;
+        continue;
+      }
+      const payload = await response.json();
+      return normaliseReport(payload);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : 'Unknown fetch error';
+    }
+  }
+  throw new Error(lastError || 'No compatible latest report endpoint returned data.');
 }
 
-export async function triggerFullRefresh(payload: {
-  brand: string;
-  market: string;
-  domain: string;
-  auditSize: number;
-  evidenceMode: string;
-  ownedUrlDiscovery: string;
-  externalEvidence: string;
-}): Promise<{ jobId: string }> {
-  if (!API_BASE_URL) return { jobId: `mock_job_${Date.now()}` };
 
-  const response = await fetch(`${API_BASE_URL}/jobs/full-refresh`, {
+export async function triggerFullRefresh(payload: { brand: string; market: string; domain: string; auditSize: number; evidenceMode: string; ownedUrlDiscovery: string; externalEvidence: string }): Promise<{ jobId: string }> {
+  if (!evidenceServiceUrl) {
+    return { jobId: `mock-${Date.now()}` };
+  }
+  const base = evidenceServiceUrl.replace(/\/$/, '');
+  const response = await fetch(`${base}/jobs/full-refresh`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload)
   });
-  if (!response.ok) throw new Error(`Refresh trigger failed: ${response.status}`);
-  const body = await response.json();
-  return { jobId: body.job_id ?? body.jobId ?? 'unknown_job' };
+  if (!response.ok) {
+    return { jobId: `mock-${Date.now()}` };
+  }
+  const data = await response.json();
+  return { jobId: String(data.job_id ?? data.jobId ?? data.id ?? `job-${Date.now()}`) };
 }

@@ -4,6 +4,7 @@ import { ExecutiveReport } from './components/ExecutiveReport';
 import { VisibilityMatrix } from './components/VisibilityMatrix';
 import { Trend } from './components/Trend';
 import { QueryDiagnostics, OwnedUrlReadiness } from './components/Diagnostics';
+import { QueryWorkbench } from './components/QueryWorkbench';
 import { Recommendations, ActionChecklist } from './components/Recommendations';
 import { RefreshPanel } from './components/RefreshPanel';
 import { fetchLatestReport } from './lib/api';
@@ -12,11 +13,12 @@ import { normaliseReport } from './lib/normaliseReport';
 import type { ReportBundle } from './types/report';
 import { mockReport } from './data/mockReport';
 
-type Tab = 'executive' | 'matrix' | 'queries' | 'owned' | 'recommendations' | 'actions' | 'refresh';
+type Tab = 'executive' | 'workbench' | 'matrix' | 'queries' | 'owned' | 'recommendations' | 'actions' | 'refresh';
 type Notice = { tone: 'success' | 'warning' | 'error'; message: string } | null;
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'executive', label: 'Executive report' },
+  { id: 'workbench', label: 'Query workbench' },
   { id: 'matrix', label: 'Visibility & trend' },
   { id: 'queries', label: 'Query diagnostics' },
   { id: 'owned', label: 'Owned URLs' },
@@ -116,6 +118,7 @@ export default function App() {
 
       <main id="report-root" className="mx-auto max-w-7xl space-y-6 px-4 py-6">
         {activeTab === 'executive' && <ExecutiveReport report={report} />}
+        {activeTab === 'workbench' && <QueryWorkbench report={report} />}
         {activeTab === 'matrix' && <><VisibilityMatrix report={report} /><Trend report={report} /></>}
         {activeTab === 'queries' && <QueryDiagnostics report={report} />}
         {activeTab === 'owned' && <OwnedUrlReadiness report={report} />}
