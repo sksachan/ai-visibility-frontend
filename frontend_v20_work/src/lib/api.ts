@@ -99,8 +99,9 @@ export async function refreshEvidence(payload: RefreshEvidencePayload): Promise<
   };
 }
 
-export async function fetchRefreshStatus(brand: string, market: string): Promise<RunStatusSummary> {
+export async function fetchRefreshStatus(brand: string, market: string, runId?: string): Promise<RunStatusSummary> {
   const params = new URLSearchParams({ brand, market });
+  if (runId) params.set('runId', runId);
   const response = await fetch(`/api/evidence/status?${params.toString()}`, {
     headers: { Accept: 'application/json' },
     cache: 'no-store'
@@ -112,7 +113,7 @@ export async function fetchRefreshStatus(brand: string, market: string): Promise
   }
 
   const runs = Array.isArray(data?.runs) ? data.runs : Array.isArray(data) ? data : [];
-  const terminal = new Set(['success', 'successful', 'completed', 'succeeded', 'failed', 'error', 'cancelled', 'canceled']);
+  const terminal = new Set(['success', 'successful', 'completed', 'succeeded', 'report_bundle_ready', 'evidence_ready', 'failed', 'error', 'cancelled', 'canceled']);
   const isActive = (run: Record<string, unknown>) => {
     const value = String(run.status ?? run.state ?? run.stage ?? '').toLowerCase();
     return value ? !terminal.has(value) : false;

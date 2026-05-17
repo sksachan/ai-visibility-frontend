@@ -389,9 +389,11 @@ app.get('/api/evidence/status', async (req, res) => {
 
   const brand = String(req.query.brand || process.env.DEFAULT_BRAND || 'Nissan');
   const market = String(req.query.market || process.env.DEFAULT_MARKET || 'Japan');
+  const runId = String(req.query.runId || req.query.run_id || '').trim();
   const params = new URLSearchParams({ brand, market }).toString();
   try {
-    const response = await fetch(`${base}/runs/status?${params}`, {
+    const statusUrl = runId ? `${base}/runs/${encodeURIComponent(runId)}/status` : `${base}/runs/status?${params}`;
+    const response = await fetch(statusUrl, {
       headers: { Accept: 'application/json' },
       cache: 'no-store'
     });
