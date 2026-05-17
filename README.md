@@ -119,3 +119,8 @@ The parser also supports full Bodhi output JSON where the Preview Node tile cont
 ## PDF export
 
 `Download PDF` exports the full offscreen report, not only the active tab. The exporter sanitises modern CSS color functions such as `oklch()` before `html2canvas` renders the report.
+
+
+## Railway build note
+
+This package intentionally does not commit `package-lock.json` so Railway/Railpack does not force `npm ci`. Dependencies are pinned in `package.json`; Railway can run `npm install` and `npm run build`, or use the included Dockerfile.
