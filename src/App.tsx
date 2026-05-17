@@ -7,7 +7,7 @@ import { OwnedUrlReadiness } from './components/Diagnostics';
 import { QueryWorkbench } from './components/QueryWorkbench';
 import { ActionChecklist, CmsRecommendations, PrRecommendations } from './components/Recommendations';
 import { RefreshPanel } from './components/RefreshPanel';
-import { fetchLatestReport } from './lib/api';
+import { fetchLatestReport, fetchRefreshStatus, type RunStatusSummary } from './lib/api';
 import { exportReportToPdf } from './lib/pdf';
 import { normaliseReport } from './lib/normaliseReport';
 import type { ReportBundle } from './types/report';
@@ -37,7 +37,8 @@ export default function App() {
   const [highlightCmsUrl, setHighlightCmsUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
-  const [footerMessage, setFooterMessage] = useState('Dashboard will auto-load the latest Bodhi run when configured. Upload JSON remains available as a fallback.');
+  const [footerMessage, setFooterMessage] = useState('Dashboard will auto-load the latest successful Bodhi report when configured. Upload JSON remains available as a fallback.');
+  const [refreshStatus, setRefreshStatus] = useState<RunStatusSummary | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const brand = import.meta.env.VITE_DEFAULT_BRAND || report.brand;
@@ -45,8 +46,19 @@ export default function App() {
 
   useEffect(() => {
     void loadLatest(true);
+    void pollRefreshStatus();
+    const timer = window.setInterval(() => void pollRefreshStatus(), 30000);
+    return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function pollRefreshStatus() {
+    try {
+      setRefreshStatus(await fetchRefreshStatus(brand, market));
+    } catch {
+      // Status is advisory only; never block report loading or manual upload.
+    }
+  }
 
   async function loadLatest(isInitialLoad = false) {
     setLoading(true);
@@ -114,6 +126,9 @@ export default function App() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">AI Brand Visibility</p>
             <h1 className="text-xl font-semibold text-slate-950">AEO/GEO Intelligence Dashboard</h1>
+            {refreshStatus?.active && (
+              <p className="mt-1 text-xs font-semibold text-amber-700">Refresh evidence is running. Showing latest successful report until completion.</p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={() => void loadLatest(false)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">

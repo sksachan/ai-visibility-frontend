@@ -42,3 +42,10 @@ BODHI_TASK_ID=<task id, optional if workflow endpoint works>
 BODHI_RUN_ID=<run id, optional if latest endpoint works>
 BODHI_PAT_TOKEN=<token>
 ```
+
+## v18 Railway Evidence Refresh integration
+- Added server-side `/api/evidence/refresh` proxy to Railway Evidence Service `/refresh/evidence`.
+- Added server-side `/api/evidence/status` proxy to Railway Evidence Service `/runs/status`.
+- Refresh Evidence UI now sends Phase 2 run controls: run mode, query portfolio mode/id, sitemap URL, max owned URLs, max external citations, query limit and evidence operation flags.
+- Dashboard continues to load latest successful report only through `/api/bodhi/latest`; refresh runs do not replace current report state while pending.
+- Added advisory refresh status chip and polling. Status errors are non-blocking.

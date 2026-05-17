@@ -271,6 +271,40 @@ function candidateEvidenceUrls(req) {
   return Array.from(new Set(urls));
 }
 
+
+function evidenceBase() {
+  return cleanBase(env('EVIDENCE_SERVICE_URL', 'VITE_EVIDENCE_SERVICE_URL', 'VITE_API_BASE_URL', 'BODHI_EVIDENCE_SERVICE_URL'));
+}
+
+function normaliseRefreshPayload(body = {}) {
+  const bool = (value, fallback = false) => {
+    if (typeof value === 'boolean') return value;
+    if (value == null || value === '') return fallback;
+    return ['true', '1', 'yes', 'y', 'on'].includes(String(value).toLowerCase());
+  };
+  const num = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  };
+  return {
+    brand: String(body.brand || process.env.DEFAULT_BRAND || 'Nissan'),
+    market: String(body.market || process.env.DEFAULT_MARKET || 'Japan'),
+    domain: String(body.domain || process.env.DEFAULT_DOMAIN || 'https://www.nissan.co.jp'),
+    run_mode: String(body.runMode || body.run_mode || 'reuse_existing_evidence'),
+    query_portfolio_mode: String(body.queryPortfolioMode || body.query_portfolio_mode || 'reuse'),
+    query_portfolio_id: String(body.queryPortfolioId || body.query_portfolio_id || ''),
+    sitemap_url: String(body.sitemapUrl || body.sitemap_url || ''),
+    query_limit: num(body.queryLimit ?? body.query_limit, 50),
+    max_owned_pages_per_query: num(body.maxOwnedPagesPerQuery ?? body.max_owned_pages_per_query, 3),
+    max_external_citations_per_query: num(body.maxExternalCitationsPerQuery ?? body.max_external_citations_per_query, 3),
+    enable_serpapi: bool(body.enableSerpapi ?? body.enable_serpapi, false),
+    enable_owned_crawl: bool(body.enableOwnedCrawl ?? body.enable_owned_crawl, true),
+    enable_external_crawl: bool(body.enableExternalCrawl ?? body.enable_external_crawl, false),
+    requested_by: 'ai-visibility-frontend',
+    note: 'Evidence refresh is executed by Railway evidence service. Frontend continues to load latest successful report until a new successful bundle is available.'
+  };
+}
+
 app.get('/api/bodhi/status', (_req, res) => {
   const hasToken = Boolean(env('BODHI_PAT_TOKEN', 'BODHI_PAT', 'BODHI_API_TOKEN', 'BODHI_PERSONAL_ACCESS_TOKEN'));
   res.json({
@@ -316,22 +350,67 @@ app.get('/api/bodhi/latest', async (req, res) => {
   });
 });
 
-app.post('/api/evidence/full-refresh', async (req, res) => {
-  const base = cleanBase(env('EVIDENCE_SERVICE_URL', 'VITE_EVIDENCE_SERVICE_URL', 'VITE_API_BASE_URL', 'BODHI_EVIDENCE_SERVICE_URL'));
+app.post('/api/evidence/refresh', async (req, res) => {
+  const base = evidenceBase();
   if (!base) {
-    res.status(202).json({ jobId: `mock-${Date.now()}`, warning: 'Evidence service is not configured.' });
+    res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured on the frontend Railway service.' });
     return;
   }
+
+  const payload = normaliseRefreshPayload(req.body || {});
   try {
-    const response = await fetch(`${base}/jobs/full-refresh`, {
+    const response = await fetch(`${base}/refresh/evidence`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(req.body || {})
+      body: JSON.stringify(payload)
     });
     const text = await response.text();
     res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
   } catch (error) {
-    res.status(202).json({ jobId: `mock-${Date.now()}`, warning: error instanceof Error ? error.message : String(error) });
+    res.status(502).json({ error: error instanceof Error ? error.message : String(error), evidenceServiceUrl: base });
+  }
+});
+
+app.get('/api/evidence/status', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) {
+    res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured on the frontend Railway service.' });
+    return;
+  }
+
+  const brand = String(req.query.brand || process.env.DEFAULT_BRAND || 'Nissan');
+  const market = String(req.query.market || process.env.DEFAULT_MARKET || 'Japan');
+  const params = new URLSearchParams({ brand, market }).toString();
+  try {
+    const response = await fetch(`${base}/runs/status?${params}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) {
+    res.status(502).json({ error: error instanceof Error ? error.message : String(error), evidenceServiceUrl: base });
+  }
+});
+
+// Compatibility endpoint for older frontend builds. It now routes through the v3 evidence refresh contract.
+app.post('/api/evidence/full-refresh', async (req, res) => {
+  req.body = normaliseRefreshPayload({ ...(req.body || {}), runMode: 'full_refresh' });
+  const base = evidenceBase();
+  if (!base) {
+    res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured on the frontend Railway service.' });
+    return;
+  }
+  try {
+    const response = await fetch(`${base}/refresh/evidence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) {
+    res.status(502).json({ error: error instanceof Error ? error.message : String(error), evidenceServiceUrl: base });
   }
 });
 

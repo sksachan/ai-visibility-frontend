@@ -29,17 +29,111 @@ export async function fetchLatestReport(brand: string, market: string): Promise<
   return normaliseReport(payload);
 }
 
-export async function triggerFullRefresh(payload: { brand: string; market: string; domain: string; auditSize: number; evidenceMode: string; ownedUrlDiscovery: string; externalEvidence: string }): Promise<{ jobId: string }> {
-  const response = await fetch('/api/evidence/full-refresh', {
+export type RefreshEvidencePayload = {
+  brand: string;
+  market: string;
+  domain: string;
+  runMode: string;
+  queryPortfolioMode: string;
+  queryPortfolioId?: string;
+  sitemapUrl?: string;
+  queryLimit: number;
+  maxOwnedPagesPerQuery: number;
+  maxExternalCitationsPerQuery: number;
+  enableSerpapi: boolean;
+  enableOwnedCrawl: boolean;
+  enableExternalCrawl: boolean;
+};
+
+export type RefreshEvidenceResult = {
+  runId?: string;
+  jobId?: string;
+  status?: string;
+  message?: string;
+  evidenceRunId?: string;
+  raw?: unknown;
+};
+
+export type RunStatusSummary = {
+  active?: boolean;
+  status?: string;
+  runId?: string;
+  jobId?: string;
+  startedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
+  latestSuccessfulRunId?: string;
+  latestSuccessfulAt?: string;
+  runs?: Array<Record<string, unknown>>;
+  raw?: unknown;
+};
+
+export async function refreshEvidence(payload: RefreshEvidencePayload): Promise<RefreshEvidenceResult> {
+  const response = await fetch('/api/evidence/refresh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(payload)
   });
-
+  const data = await readJsonResponse(response);
   if (!response.ok) {
-    return { jobId: `mock-${Date.now()}` };
+    const detail = data?.error || data?.message || `${response.status} ${response.statusText}`;
+    throw new Error(detail);
+  }
+  return {
+    runId: String(data.run_id ?? data.runId ?? data.evidence_run_id ?? data.evidenceRunId ?? data.id ?? ''),
+    jobId: String(data.job_id ?? data.jobId ?? data.id ?? ''),
+    evidenceRunId: String(data.evidence_run_id ?? data.evidenceRunId ?? data.run_id ?? data.runId ?? ''),
+    status: String(data.status ?? data.state ?? 'started'),
+    message: data.message ? String(data.message) : undefined,
+    raw: data
+  };
+}
+
+export async function fetchRefreshStatus(brand: string, market: string): Promise<RunStatusSummary> {
+  const params = new URLSearchParams({ brand, market });
+  const response = await fetch(`/api/evidence/status?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store'
+  });
+  const data = await readJsonResponse(response);
+  if (!response.ok) {
+    const detail = data?.error || data?.message || `${response.status} ${response.statusText}`;
+    throw new Error(detail);
   }
 
-  const data = await response.json();
-  return { jobId: String(data.job_id ?? data.jobId ?? data.id ?? `job-${Date.now()}`) };
+  const runs = Array.isArray(data?.runs) ? data.runs : Array.isArray(data) ? data : [];
+  const activeRun = runs.find((run: Record<string, unknown>) => ['queued', 'pending', 'running', 'in_progress', 'in-progress', 'started'].includes(String(run.status ?? run.state ?? '').toLowerCase()));
+  const latestSuccess = runs.find((run: Record<string, unknown>) => ['success', 'successful', 'completed', 'succeeded'].includes(String(run.status ?? run.state ?? '').toLowerCase()));
+
+  return {
+    active: Boolean(activeRun || data?.active),
+    status: String(activeRun?.status ?? activeRun?.state ?? data?.status ?? data?.state ?? ''),
+    runId: String(activeRun?.run_id ?? activeRun?.runId ?? data?.run_id ?? data?.runId ?? ''),
+    jobId: String(activeRun?.job_id ?? activeRun?.jobId ?? data?.job_id ?? data?.jobId ?? ''),
+    startedAt: String(activeRun?.started_at ?? activeRun?.startedAt ?? data?.started_at ?? data?.startedAt ?? ''),
+    completedAt: String(data?.completed_at ?? data?.completedAt ?? ''),
+    failedAt: String(data?.failed_at ?? data?.failedAt ?? ''),
+    latestSuccessfulRunId: String(latestSuccess?.run_id ?? latestSuccess?.runId ?? data?.latest_successful_run_id ?? data?.latestSuccessfulRunId ?? ''),
+    latestSuccessfulAt: String(latestSuccess?.completed_at ?? latestSuccess?.completedAt ?? data?.latest_successful_at ?? data?.latestSuccessfulAt ?? ''),
+    runs,
+    raw: data
+  };
+}
+
+// Kept as a compatibility wrapper for older components/imports.
+export async function triggerFullRefresh(payload: { brand: string; market: string; domain: string; auditSize: number; evidenceMode: string; ownedUrlDiscovery: string; externalEvidence: string }): Promise<{ jobId: string }> {
+  const result = await refreshEvidence({
+    brand: payload.brand,
+    market: payload.market,
+    domain: payload.domain,
+    runMode: payload.externalEvidence === 'refresh_serp_evidence' ? 'fresh_ai_citations' : 'reuse_existing_evidence',
+    queryPortfolioMode: payload.evidenceMode === 'generate_synthetic_queries' ? 'synthetic' : payload.evidenceMode === 'upload_query_portfolio' ? 'manual' : 'reuse',
+    queryLimit: payload.auditSize,
+    maxOwnedPagesPerQuery: 3,
+    maxExternalCitationsPerQuery: 3,
+    enableSerpapi: payload.externalEvidence === 'refresh_serp_evidence',
+    enableOwnedCrawl: payload.ownedUrlDiscovery !== 'previous_inventory',
+    enableExternalCrawl: payload.externalEvidence === 'crawl_external_citations'
+  });
+  return { jobId: result.jobId || result.runId || `job-${Date.now()}` };
 }
