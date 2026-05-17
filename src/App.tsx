@@ -77,6 +77,18 @@ export default function App() {
   }
 
   const fileName = useMemo(() => `${report.brand}_${report.market}_${report.runId}_ai_visibility_report.pdf`.replaceAll(' ', '_'), [report]);
+  const reportSections = (
+    <>
+      <ExecutiveReport report={report} />
+      <QueryWorkbench report={report} />
+      <VisibilityMatrix report={report} />
+      <Trend report={report} />
+      <QueryDiagnostics report={report} />
+      <OwnedUrlReadiness report={report} />
+      <Recommendations report={report} />
+      <ActionChecklist report={report} />
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -94,7 +106,7 @@ export default function App() {
               <Upload size={16} /> Upload report JSON
             </button>
             <input ref={fileRef} className="hidden" type="file" accept="application/json,.json" onChange={(e) => void onUpload(e.target.files?.[0])} />
-            <button onClick={() => void exportElementToPdf('report-root', fileName)} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
+            <button onClick={() => void exportElementToPdf('pdf-report-root', fileName)} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white">
               <Download size={16} /> Download PDF
             </button>
           </div>
@@ -126,6 +138,9 @@ export default function App() {
         {activeTab === 'actions' && <ActionChecklist report={report} />}
         {activeTab === 'refresh' && <RefreshPanel brand={report.brand} market={report.market} />}
       </main>
+      <div id="pdf-report-root" className="fixed -left-[10000px] top-0 w-[1200px] space-y-6 bg-slate-50 px-6 py-6" aria-hidden="true">
+        {reportSections}
+      </div>
     </div>
   );
 }

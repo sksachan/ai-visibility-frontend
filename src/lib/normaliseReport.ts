@@ -128,13 +128,6 @@ function parseRecord(value: unknown): AnyRecord {
   return asRecord(parseMaybeJson(value));
 }
 
-function parseList(value: unknown): AnyRecord[] {
-  const parsed = parseMaybeJson(value);
-  if (Array.isArray(parsed)) return parsed as AnyRecord[];
-  const rec = asRecord(parsed);
-  return asArray<AnyRecord>(firstDefined(rec.rows, rec.queries, rec.items, rec.modules, rec.opportunities, rec.patterns));
-}
-
 function queryKey(row: AnyRecord): string {
   return asString(firstDefined(row.query_id, row.id, row.qid)).toLowerCase() || asString(row.query).toLowerCase();
 }
@@ -388,6 +381,10 @@ function mapActionChecklist(raw: unknown): ActionItem[] {
 
 function mapFrontendPreviewBundle(source: AnyRecord): ReportBundle | null {
   const schema = asString(source.schema_version);
+  const contract = asString(source.contract_version);
+  // The new dashboard contract is handled by mapCanonicalReport().
+  // This legacy mapper is kept only for older Preview Node bundles.
+  if (schema === 'query_workbench.v1' || contract === 'page_level_cms_grouped_pr.v1' || Array.isArray(source.query_workbench)) return null;
   const looksLikeBundle = schema.includes('frontend_report_bundle') || Array.isArray(source.query_evidence) || Array.isArray(source.owned_readiness) || Array.isArray(source.cms_ready_content_modules);
   if (!looksLikeBundle) return null;
 
@@ -512,7 +509,18 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
   const market = asString(source.market, 'Unknown market');
   const kpis = asRecord(asRecord(source.executive).headline_metrics);
   const sourceLandscape = asRecord(source.source_landscape);
-  const sourceTypeCounts = asArray<AnyRecord>(sourceLandscape.source_type_counts).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), count: asNumber(item.count) }));
+  const rawSourceTypeCounts = firstDefined(sourceLandscape.source_type_counts, sourceLandscape.sourceTypeCounts);
+  const sourceTypeCounts = Array.isArray(rawSourceTypeCounts)
+    ? asArray<AnyRecord>(rawSourceTypeCounts).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), count: asNumber(item.count) }))
+    : mapSourceTypeCounts(asRecord(rawSourceTypeCounts));
+  const derivedExternalSources: AnyRecord[] = [];
+  queryWorkbench.forEach((row) => {
+    const q = asString(row.query);
+    [...asArray<AnyRecord>(row.external_top3_benchmark), ...asArray<AnyRecord>(asRecord(row.current_ai_visibility).top_citations)].forEach((sourceItem) => {
+      if (bool(sourceItem.is_owned_domain) || bool(sourceItem.is_owned_target_page)) return;
+      derivedExternalSources.push({ ...sourceItem, query: q });
+    });
+  });
   const citationsToUi = (items: AnyRecord[]): CitationExample[] => items.map((item) => ({
     title: asString(firstDefined(item.title, item.source_name, item.name), 'Untitled source'),
     url: asString(firstDefined(item.url, item.source_url, item.link), ''),
@@ -661,8 +669,33 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
       methodologyCaveats: textToList(asRecord(source.methodology).refresh_policy),
       headlineMetrics: { brandScore, ownedTargetCitations, ownedDomainCitations, competitorLedQueries, externalLedQueries, queryCount, ownedPageCount: ownedMap.size, externalSourceCount: asNumber(headline.external_source_count), averageOwnedGeoScore120: asNumber(headline.average_owned_geo_score_120) }
     },
-    visibility: { brandScore, ownedTargetCitations, ownedDomainCitations, competitorLedQueries, externalLedQueries, brandVsCompetitors: [] },
-    sourceLandscape: { sourceTypeCounts, observedNonOwnedDomains: [], winningSourcePatterns: asArray<AnyRecord>(source.source_landscape?.winning_source_patterns).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), citationCount: asNumber(firstDefined(item.citationCount, item.citation_count)), winningPattern: asString(firstDefined(item.winningPattern, item.winning_pattern)) })) },
+    visibility: {
+      brandScore,
+      ownedTargetCitations,
+      ownedDomainCitations,
+      competitorLedQueries,
+      externalLedQueries,
+      brandVsCompetitors: asArray<AnyRecord>(sourceLandscape.competitors).map((item, index) => ({
+        name: asString(item.name, `Competitor ${index + 1}`),
+        visibility: asNumber(item.count),
+        citationShare: asNumber(item.count),
+        sentiment: 0,
+        position: index < 2 ? 'Leader' : index < 4 ? 'Challenger' : 'Watchlist'
+      }))
+    },
+    sourceLandscape: {
+      sourceTypeCounts,
+      observedNonOwnedDomains: (asArray<AnyRecord>(firstDefined(sourceLandscape.observed_non_owned_domains, sourceLandscape.observedNonOwnedDomains)).length
+        ? asArray<AnyRecord>(firstDefined(sourceLandscape.observed_non_owned_domains, sourceLandscape.observedNonOwnedDomains)).map((item) => ({
+            domain: asString(item.domain),
+            sourceType: asString(firstDefined(item.source_type, item.sourceType)),
+            observedCount: asNumber(firstDefined(item.observed_count, item.count)),
+            exampleUrl: asString(firstDefined(item.example_url, item.exampleUrl)),
+            exampleQuery: asString(firstDefined(item.example_query, item.exampleQuery))
+          }))
+        : deriveObservedDomains(derivedExternalSources)),
+      winningSourcePatterns: asArray<AnyRecord>(sourceLandscape.winning_source_patterns).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), citationCount: asNumber(firstDefined(item.citationCount, item.citation_count)), winningPattern: asString(firstDefined(item.winningPattern, item.winning_pattern)) }))
+    },
     trend: [], queries, ownedPages: Array.from(ownedMap.values()), cmsModules, prOpportunities, actionChecklist, queryWorkbench: queryWorkbench as any,
     parserMeta: { source: 'canonical-report', parsedAt: new Date().toISOString(), queryCount: queries.length, ownedPageCount: ownedMap.size, cmsModuleCount: cmsModules.length, prOpportunityCount: prOpportunities.length, actionCount: actionChecklist.length, warnings: [] }
   };
@@ -677,8 +710,15 @@ export function normaliseReport(raw: unknown): ReportBundle {
   if (canonical) return canonical;
 
   const run = unwrapRun(root);
-  const frontendPreview = mapFrontendPreviewBundle(parsePreviewTile(run, 'frontend_report_bundle'));
+  const previewBundle = parsePreviewTile(run, 'frontend_report_bundle');
+  const previewCanonical = mapCanonicalReport(previewBundle);
+  if (previewCanonical) return previewCanonical;
+  const frontendPreview = mapFrontendPreviewBundle(previewBundle);
   if (frontendPreview) return frontendPreview;
+
+  const assembledBundle = parseNodeJson(run, 'Assemble frontend_report_bundle for Preview');
+  const assembledCanonical = mapCanonicalReport(assembledBundle);
+  if (assembledCanonical) return assembledCanonical;
 
   const ui = asRecord(nodeData(run, 'UI Node').response);
   const executiveReport = parseNodeJson(run, 'Executive Insight Synthesiser', 'response');

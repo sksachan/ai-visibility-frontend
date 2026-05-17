@@ -20,8 +20,8 @@ export function VisibilityMatrix({ report }: { report: ReportBundle }) {
   const [sourceFilter, setSourceFilter] = useState('All');
   const [domainSort, setDomainSort] = useState('count_desc');
 
-  const sourceCounts = report.sourceLandscape?.sourceTypeCounts ?? [];
-  const domainsAll = report.sourceLandscape?.observedNonOwnedDomains ?? [];
+  const sourceCounts = useMemo(() => report.sourceLandscape?.sourceTypeCounts ?? [], [report.sourceLandscape?.sourceTypeCounts]);
+  const domainsAll = useMemo(() => report.sourceLandscape?.observedNonOwnedDomains ?? [], [report.sourceLandscape?.observedNonOwnedDomains]);
   const sourceTypes = useMemo(() => unique([...sourceCounts.map((s) => s.sourceType), ...domainsAll.map((d) => d.sourceType)]), [sourceCounts, domainsAll]);
   const domains = useMemo(() => {
     const rows = domainsAll.filter((domain) => sourceFilter === 'All' || domain.sourceType === sourceFilter);
