@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, RefreshCcw, Upload } from 'lucide-react';
+import { BookOpen, Download, History, RefreshCcw, Upload } from 'lucide-react';
 import { ExecutiveReport } from './components/ExecutiveReport';
 import { VisibilityMatrix } from './components/VisibilityMatrix';
 import { Trend } from './components/Trend';
@@ -26,8 +26,6 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: 'cms', label: 'CMS' },
   { id: 'pr', label: 'PR' },
   { id: 'actions', label: 'Action checklist' },
-  { id: 'runs', label: 'Previous runs' },
-  { id: 'appendix', label: 'Appendix' },
   { id: 'refresh', label: 'Refresh Evidence' }
 ];
 
@@ -138,6 +136,12 @@ export default function App() {
             <button onClick={() => void loadLatest(false)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
               <RefreshCcw size={16} /> {loading ? 'Loading...' : 'Load latest'}
             </button>
+            <button onClick={() => setActiveTab('runs')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+              <History size={16} /> Previous runs
+            </button>
+            <button onClick={() => setActiveTab('appendix')} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+              <BookOpen size={16} /> Documentation
+            </button>
             <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
               <Upload size={16} /> Upload report JSON
             </button>
@@ -147,7 +151,7 @@ export default function App() {
             </button>
           </div>
         </div>
-        <nav className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-3">
+        <nav className="hide-scrollbar mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-3">
           {tabs.map((tab) => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold ${activeTab === tab.id ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-700'}`}>
               {tab.label}
@@ -172,7 +176,7 @@ export default function App() {
         {activeTab === 'cms' && <CmsRecommendations report={report} highlightUrl={highlightCmsUrl} />}
         {activeTab === 'pr' && <PrRecommendations report={report} />}
         {activeTab === 'actions' && <ActionChecklist report={report} />}
-        {activeTab === 'runs' && <RunHistory brand={brand} market={market} onLoad={(next, row) => { setReport(next); setActiveTab('executive'); setFooterMessage(parseMessage(next, `Loaded previous run ${row.run_id}`)); setNotice({ tone: 'success', message: `Loaded previous report run ${row.run_id}.` }); }} />}
+        {activeTab === 'runs' && <RunHistory brand={brand} market={market} onLoad={(next, row) => { setReport(next); setActiveTab('executive'); setFooterMessage(parseMessage(next, `Loaded previous run ${row.run_id}`)); setNotice(null); }} />}
         {activeTab === 'appendix' && <MethodologyAppendix report={report} />}
         {activeTab === 'refresh' && <RefreshPanel brand={report.brand} market={report.market} />}
       </main>

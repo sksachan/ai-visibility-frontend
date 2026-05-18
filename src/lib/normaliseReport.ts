@@ -380,16 +380,20 @@ function mapOwnedPages(cmsPayload: AnyRecord): OwnedPage[] {
       diagnostics: gaps.length ? gaps : ['No dimension gaps supplied'],
       recommendedHtmlChanges: htmlChanges.map((change) => asString(firstDefined(change.proposed_heading, change.cms_module_type, change.recommendation_id))).filter(Boolean),
       representativeCitations: citations,
-      technicalSignals: {
-        jsonLdPresent: bool(firstDefined(page.json_ld_present, page.has_json_ld)) || asArray<string>(page.schema_types_detected).length > 0,
-        schemaTypes: asArray<string>(page.schema_types_detected),
-        robotsMeta: asString(firstDefined(page.robots_meta, asRecord(page.metadata).robots)),
-        canonicalUrl: asString(firstDefined(page.canonical_url, page.final_url, page.resolved_url)),
-        metaDescriptionPresent: Boolean(firstDefined(page.meta_description, asRecord(page.metadata).description, asRecord(page.metadata)['og:description'])),
-        crawlStatus: asString(page.crawl_status),
-        wordCount: asNumber(page.word_count),
-        markdownChars: asNumber(page.markdown_chars)
-      }
+      technicalSignals: (() => {
+        const tech = asRecord(firstDefined(page.technical_signals, page.technicalSignals));
+        const schemaTypes = asArray<string>(firstDefined(tech.schema_types, tech.schemaTypes, page.schema_types_detected));
+        return {
+          jsonLdPresent: bool(firstDefined(tech.json_ld_present, tech.jsonLdPresent, page.json_ld_present, page.has_json_ld)) || schemaTypes.length > 0,
+          schemaTypes,
+          robotsMeta: asString(firstDefined(tech.robots_meta, tech.robotsMeta, page.robots_meta, asRecord(page.metadata).robots)),
+          canonicalUrl: asString(firstDefined(tech.canonical_url, tech.canonicalUrl, page.canonical_url, page.final_url, page.resolved_url)),
+          metaDescriptionPresent: Boolean(firstDefined(tech.meta_description_present, tech.metaDescriptionPresent, page.meta_description, asRecord(page.metadata).description, asRecord(page.metadata)['og:description'])),
+          crawlStatus: asString(firstDefined(tech.crawl_status, tech.crawlStatus, page.crawl_status)),
+          wordCount: asNumber(firstDefined(tech.word_count, tech.wordCount, page.word_count)),
+          markdownChars: asNumber(firstDefined(tech.markdown_chars, tech.markdownChars, page.markdown_chars))
+        };
+      })()
     };
   });
 }

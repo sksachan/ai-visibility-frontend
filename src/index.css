@@ -15,3 +15,6 @@ body { margin: 0; }
   .no-print { display: none !important; }
   body { background: white; }
 }
+
+.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }

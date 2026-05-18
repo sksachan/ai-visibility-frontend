@@ -199,34 +199,39 @@ export function ActionChecklist({ report }: { report: ReportBundle }) {
           <option value="priority">Sort: priority</option><option value="coverage">Sort: query coverage</option><option value="target">Sort: target</option><option value="category">Sort: category</option>
         </select>
       </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-3">Action</th><th className="px-3 py-3">Target / source group</th><th className="px-3 py-3">Category / source type</th><th className="px-3 py-3">Linked queries</th><th className="px-3 py-3">Owner</th><th className="px-3 py-3">Priority</th><th className="px-3 py-3">Effort</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Workstream</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.map((item, index) => <ActionRow key={`${item.source}-${item.target}-${item.action}-${index}`} item={item} />)}
-          </tbody>
-        </table>
+      <div className="grid gap-3">
+        {filtered.map((item, index) => <ActionRow key={`${item.source}-${item.target}-${item.action}-${index}`} item={item} />)}
       </div>
     </Card>
   );
 }
 
 function ActionRow({ item }: { item: ActionItem }) {
+  const target = item.target || item.source || 'No target supplied';
+  const compactTarget = target.length > 90 ? `${target.slice(0, 87)}…` : target;
   return (
-    <tr className="align-top">
-      <td className="max-w-md px-3 py-4 font-medium leading-6 text-slate-950">{item.action}</td>
-      <td className="max-w-md px-3 py-4 break-all text-slate-600">{item.target || '—'}</td>
-      <td className="max-w-xs px-3 py-4 text-slate-600">{label(item.category || item.dependency || item.targetSourceTypes?.join(', ') || '')}</td>
-      <td className="px-3 py-4 text-slate-600">{item.queryCoverageCount || item.linkedQueryIds?.length || '—'}</td>
-      <td className="px-3 py-4 text-slate-600">{item.owner}</td>
-      <td className="px-3 py-4"><Badge tone={tone(item.priority)}>{item.priority}</Badge></td>
-      <td className="px-3 py-4 text-slate-600">{item.effort}</td>
-      <td className="px-3 py-4 text-slate-600">{item.status}</td>
-      <td className="px-3 py-4 text-slate-500">{item.workstream || item.source}</td>
-    </tr>
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={tone(item.priority)}>{item.priority}</Badge>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Effort {item.effort}</span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.status}</span>
+            {(item.workstream || item.source) && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.workstream || item.source}</span>}
+          </div>
+          <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">{item.action}</h3>
+          <p className="mt-2 break-words text-sm leading-6 text-slate-600">Target: {compactTarget}</p>
+        </div>
+        <div className="grid min-w-[260px] gap-2 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-1">
+          <Meta label="Owner" value={item.owner} />
+          <Meta label="Category" value={label(item.category || item.dependency || item.targetSourceTypes?.join(', ') || 'Not supplied')} />
+          <Meta label="Linked queries" value={String(item.queryCoverageCount || item.linkedQueryIds?.length || '—')} />
+        </div>
+      </div>
+    </article>
   );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 font-semibold text-slate-800">{value}</p></div>;
 }
