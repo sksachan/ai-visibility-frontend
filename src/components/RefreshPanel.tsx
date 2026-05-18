@@ -130,6 +130,8 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
   const [sitemapUrl, setSitemapUrl] = useState('');
   const [maxOwnedPagesPerQuery, setMaxOwnedPagesPerQuery] = useState(3);
   const [maxExternalCitationsPerQuery, setMaxExternalCitationsPerQuery] = useState(3);
+  const [maxOwnedUrls, setMaxOwnedUrls] = useState(100);
+  const [maxExternalUrls, setMaxExternalUrls] = useState(150);
   const [enableSerpapi, setEnableSerpapi] = useState(false);
   const [enableOwnedCrawl, setEnableOwnedCrawl] = useState(false);
   const [enableExternalCrawl, setEnableExternalCrawl] = useState(false);
@@ -197,6 +199,8 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
         queryLimit,
         maxOwnedPagesPerQuery,
         maxExternalCitationsPerQuery,
+        maxOwnedUrls,
+        maxExternalUrls,
         enableSerpapi,
         enableOwnedCrawl,
         enableExternalCrawl,
@@ -282,6 +286,14 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
           </label>
           <label className="text-sm font-medium text-slate-700">External citations per query
             <input type="number" min={1} max={10} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={maxExternalCitationsPerQuery} onChange={(e) => setMaxExternalCitationsPerQuery(Number(e.target.value))} />
+          </label>
+          <label className="text-sm font-medium text-slate-700">Max owned URLs audited
+            <input type="number" min={1} max={500} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={maxOwnedUrls} onChange={(e) => setMaxOwnedUrls(Number(e.target.value))} />
+            <span className="mt-1 block text-xs font-normal text-slate-500">Caps unique owned URLs after query mapping. Use 100 for a full 50-query audit.</span>
+          </label>
+          <label className="text-sm font-medium text-slate-700">Max external URLs crawled
+            <input type="number" min={1} max={500} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={maxExternalUrls} onChange={(e) => setMaxExternalUrls(Number(e.target.value))} />
+            <span className="mt-1 block text-xs font-normal text-slate-500">Caps deduped external citation pages. 150 supports 50 queries × 3 citations.</span>
           </label>
           <label className="text-sm font-medium text-slate-700">Language
             <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={language} onChange={(e) => setLanguage(e.target.value)} />

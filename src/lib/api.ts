@@ -65,6 +65,8 @@ export type RefreshEvidencePayload = {
   queryLimit: number;
   maxOwnedPagesPerQuery: number;
   maxExternalCitationsPerQuery: number;
+  maxOwnedUrls?: number;
+  maxExternalUrls?: number;
   enableSerpapi: boolean;
   enableOwnedCrawl: boolean;
   enableExternalCrawl: boolean;
@@ -168,6 +170,8 @@ export async function triggerFullRefresh(payload: { brand: string; market: strin
     queryLimit: payload.auditSize,
     maxOwnedPagesPerQuery: 3,
     maxExternalCitationsPerQuery: 3,
+    maxOwnedUrls: 100,
+    maxExternalUrls: 150,
     enableSerpapi: payload.externalEvidence === 'refresh_serp_evidence',
     enableOwnedCrawl: payload.ownedUrlDiscovery !== 'previous_inventory',
     enableExternalCrawl: payload.externalEvidence === 'crawl_external_citations',
