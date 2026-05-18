@@ -121,13 +121,27 @@ function OwnedPageCard({ page }: { page: OwnedPage }) {
 
 
 function TechnicalSignals({ page }: { page: OwnedPage }) {
-  const tech = page.technicalSignals;
-  if (!tech) return <span className="text-xs text-slate-400">Not supplied</span>;
-  const signals = [
-    { label: 'JSON-LD', ok: Boolean(tech.jsonLdPresent) },
-    { label: 'Canonical', ok: Boolean(tech.canonicalUrl) },
-    { label: 'Meta desc', ok: Boolean(tech.metaDescriptionPresent) },
-    { label: 'Crawled', ok: tech.crawlStatus === 'success' }
-  ];
-  return <div className="flex min-w-[180px] flex-wrap gap-1">{signals.map((s) => <span key={s.label} className={`rounded-full px-2 py-1 text-[11px] font-semibold ${s.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>{s.label}</span>)}</div>;
+  const tech = page.technicalSignals || {};
+  const schemaTypes = tech.schemaTypes || [];
+  const jsonLdQuality = tech.jsonLdPresent
+    ? (schemaTypes.length >= 2 || (page.structure ?? 0) >= 2 ? 'Present · good quality' : 'Present · partial')
+    : (page.structure ?? 0) > 0 || schemaTypes.length
+      ? 'Partial · needs review'
+      : 'Missing';
+  const tone = jsonLdQuality.startsWith('Present · good') ? 'bg-emerald-50 text-emerald-800 border-emerald-100'
+    : jsonLdQuality.startsWith('Present') || jsonLdQuality.startsWith('Partial') ? 'bg-amber-50 text-amber-800 border-amber-100'
+    : 'bg-red-50 text-red-800 border-red-100';
+  const supporting = [
+    tech.canonicalUrl ? 'canonical' : '',
+    tech.metaDescriptionPresent ? 'meta description' : '',
+    tech.crawlStatus === 'success' ? 'crawled' : '',
+    tech.wordCount ? `${tech.wordCount} words` : ''
+  ].filter(Boolean);
+  return (
+    <div className="min-w-[210px] space-y-1">
+      <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold ${tone}`}>JSON-LD: {jsonLdQuality}</span>
+      {schemaTypes.length ? <p className="text-[11px] leading-4 text-slate-500">Schema: {schemaTypes.slice(0, 3).join(', ')}{schemaTypes.length > 3 ? '…' : ''}</p> : null}
+      {supporting.length ? <p className="text-[11px] leading-4 text-slate-500">{supporting.join(' · ')}</p> : null}
+    </div>
+  );
 }

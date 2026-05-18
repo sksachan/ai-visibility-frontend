@@ -4,13 +4,23 @@ import { BrandTopicScorecard } from './BrandTopicScorecard';
 
 export function ExecutiveReport({ report }: { report: ReportBundle }) {
   const metrics = report.executive.headlineMetrics;
+  const score = metrics.brandScore ?? 0;
+  const queryCount = metrics.queryCount ?? report.queries.length;
+  const geo = metrics.averageOwnedGeoScore120 ?? 0;
+  const position = score >= 60 ? 'is strongly visible' : score >= 35 ? 'has moderate AI visibility' : 'has weak AI visibility';
+  const implication = score >= 60
+    ? 'The priority is to defend citation quality and keep owned pages current.'
+    : 'The priority is to improve owned-page extractability and strengthen external citation coverage.';
+  const executiveHeadline = `${report.brand} ${position} across ${queryCount} audited queries.`;
+  const executiveSubline = `AI visibility is ${score.toFixed(1)}/100 and average owned-page GEO readiness is ${geo.toFixed(1)}/120. ${implication}`;
   return (
     <div className="space-y-5">
       <Card className="!bg-slate-950 !text-white">
         <p className="text-sm uppercase tracking-[0.2em] text-slate-300">Executive summary</p>
         <h1 className="mt-3 max-w-5xl text-3xl font-semibold tracking-tight md:text-5xl">
-          {report.executive.summary}
+          {executiveHeadline}
         </h1>
+        <p className="mt-4 max-w-4xl text-base leading-7 text-slate-300 md:text-lg">{executiveSubline}</p>
         <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
           <span>Run: {report.runId}</span>
           <span>Evidence date: {report.evidenceDate}</span>

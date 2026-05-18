@@ -343,6 +343,49 @@ function mapQueries(prPayload: AnyRecord): QueryDiagnostic[] {
   });
 }
 
+
+function urlKey(value: unknown): string {
+  return asString(value).trim().replace(/#.*$/, '').replace(/\/$/, '').toLowerCase();
+}
+
+function pageUrl(item: AnyRecord): string {
+  return asString(firstDefined(item.url, item.page_url, item.target_url, item.final_url, item.resolved_url, item.canonical_url));
+}
+
+function technicalSignalsFromPage(page: AnyRecord): OwnedPage['technicalSignals'] {
+  const tech = asRecord(firstDefined(page.technical_signals, page.technicalSignals));
+  const metadata = asRecord(page.metadata);
+  const schemaTypes = asArray<string>(firstDefined(tech.schema_types, tech.schemaTypes, page.schema_types_detected, page.schemaTypesDetected));
+  const structureScore = asNumber(firstDefined(page.structure, page.structured_data, asRecord(page.geo_dimensions).structured_extractability));
+  return {
+    jsonLdPresent: bool(firstDefined(tech.json_ld_present, tech.jsonLdPresent, page.json_ld_present, page.has_json_ld)) || schemaTypes.length > 0 || structureScore > 0,
+    schemaTypes,
+    robotsMeta: asString(firstDefined(tech.robots_meta, tech.robotsMeta, page.robots_meta, metadata.robots)),
+    canonicalUrl: asString(firstDefined(tech.canonical_url, tech.canonicalUrl, page.canonical_url, page.final_url, page.resolved_url)),
+    metaDescriptionPresent: Boolean(firstDefined(tech.meta_description_present, tech.metaDescriptionPresent, page.meta_description, page.metaDescription, metadata.description, metadata['og:description'])),
+    crawlStatus: asString(firstDefined(tech.crawl_status, tech.crawlStatus, page.crawl_status)),
+    wordCount: asNumber(firstDefined(tech.word_count, tech.wordCount, page.word_count)),
+    markdownChars: asNumber(firstDefined(tech.markdown_chars, tech.markdownChars, page.markdown_chars))
+  };
+}
+
+function buildOwnedTechnicalIndex(source: AnyRecord): Map<string, OwnedPage['technicalSignals']> {
+  const rows = [
+    ...asArray<AnyRecord>(source.owned_url_readiness),
+    ...asArray<AnyRecord>(source.owned_pages),
+    ...asArray<AnyRecord>(asRecord(source.owned_pages_full).pages),
+    ...asArray<AnyRecord>(asRecord(source.audit_context).pages),
+    ...asArray<AnyRecord>(asRecord(source.evidence_scope).owned_pages),
+    ...asArray<AnyRecord>(asRecord(source.evidence_scope).owned_urls)
+  ];
+  const out = new Map<string, OwnedPage['technicalSignals']>();
+  for (const row of rows) {
+    const key = urlKey(pageUrl(row));
+    if (key && !out.has(key)) out.set(key, technicalSignalsFromPage(row));
+  }
+  return out;
+}
+
 function extractAiHygiene(source: AnyRecord): AiHygiene | undefined {
   const hygiene = asRecord(firstDefined(source.ai_discoverability_hygiene, source.site_ai_hygiene, asRecord(source.executive).ai_discoverability_hygiene, asRecord(source.evidence_collection).site_ai_hygiene));
   return Object.keys(hygiene).length ? hygiene as AiHygiene : undefined;
@@ -380,20 +423,7 @@ function mapOwnedPages(cmsPayload: AnyRecord): OwnedPage[] {
       diagnostics: gaps.length ? gaps : ['No dimension gaps supplied'],
       recommendedHtmlChanges: htmlChanges.map((change) => asString(firstDefined(change.proposed_heading, change.cms_module_type, change.recommendation_id))).filter(Boolean),
       representativeCitations: citations,
-      technicalSignals: (() => {
-        const tech = asRecord(firstDefined(page.technical_signals, page.technicalSignals));
-        const schemaTypes = asArray<string>(firstDefined(tech.schema_types, tech.schemaTypes, page.schema_types_detected));
-        return {
-          jsonLdPresent: bool(firstDefined(tech.json_ld_present, tech.jsonLdPresent, page.json_ld_present, page.has_json_ld)) || schemaTypes.length > 0,
-          schemaTypes,
-          robotsMeta: asString(firstDefined(tech.robots_meta, tech.robotsMeta, page.robots_meta, asRecord(page.metadata).robots)),
-          canonicalUrl: asString(firstDefined(tech.canonical_url, tech.canonicalUrl, page.canonical_url, page.final_url, page.resolved_url)),
-          metaDescriptionPresent: Boolean(firstDefined(tech.meta_description_present, tech.metaDescriptionPresent, page.meta_description, asRecord(page.metadata).description, asRecord(page.metadata)['og:description'])),
-          crawlStatus: asString(firstDefined(tech.crawl_status, tech.crawlStatus, page.crawl_status)),
-          wordCount: asNumber(firstDefined(tech.word_count, tech.wordCount, page.word_count)),
-          markdownChars: asNumber(firstDefined(tech.markdown_chars, tech.markdownChars, page.markdown_chars))
-        };
-      })()
+technicalSignals: technicalSignalsFromPage(page)
     };
   });
 }
@@ -634,6 +664,7 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
   const market = asString(source.market, 'Unknown market');
   const kpis = asRecord(asRecord(source.executive).headline_metrics);
   const sourceLandscape = asRecord(source.source_landscape);
+  const technicalIndex = buildOwnedTechnicalIndex(source);
   const rawSourceTypeCounts = firstDefined(sourceLandscape.source_type_counts, sourceLandscape.sourceTypeCounts);
   const sourceTypeCounts = Array.isArray(rawSourceTypeCounts)
     ? asArray<AnyRecord>(rawSourceTypeCounts).map((item) => ({ sourceType: asString(firstDefined(item.sourceType, item.source_type)), count: asNumber(item.count) }))
@@ -702,10 +733,12 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
         existing.relatedQueries.push(related);
         return;
       }
+      const tech = technicalIndex.get(urlKey(url)) || technicalSignalsFromPage(item);
       ownedMap.set(url, {
         url,
         title: asString(item.title),
         journeyCategory: asString(row.journey_category, 'Unclassified'),
+        evidenceMatchStatus: asString(firstDefined(item.crawl_status, item.extraction_status, tech?.crawlStatus)),
         mappedQuery: asString(row.query),
         relatedQueries: [related],
         geoScore: asNumber(item.current_geo_score_120),
@@ -717,7 +750,8 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
         authority: asNumber(firstDefined(dims.evidence_and_proof, dims.authority, dims.eeat_signals)),
         faqReadiness: asNumber(dims.faq_readiness),
         diagnostics: asArray<string>(item.geo_gaps),
-        recommendedHtmlChanges: asArray<string>(item.recommended_update_focus)
+        recommendedHtmlChanges: asArray<string>(item.recommended_update_focus),
+        technicalSignals: tech
       });
     });
   });

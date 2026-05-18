@@ -208,10 +208,11 @@ export function ActionChecklist({ report }: { report: ReportBundle }) {
 
 function ActionRow({ item }: { item: ActionItem }) {
   const target = item.target || item.source || 'No target supplied';
-  const compactTarget = target.length > 90 ? `${target.slice(0, 87)}…` : target;
+  const isUrl = /^https?:\/\//i.test(target);
+  const action = item.action.replace(target, '').replace(/:\s*$/, '').trim() || item.action;
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={tone(item.priority)}>{item.priority}</Badge>
@@ -219,10 +220,13 @@ function ActionRow({ item }: { item: ActionItem }) {
             <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.status}</span>
             {(item.workstream || item.source) && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.workstream || item.source}</span>}
           </div>
-          <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">{item.action}</h3>
-          <p className="mt-2 break-words text-sm leading-6 text-slate-600">Target: {compactTarget}</p>
+          <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">{action}</h3>
+          <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Target</p>
+            <p className={`${isUrl ? 'break-all font-mono text-xs' : 'break-words'}`}>{target}</p>
+          </div>
         </div>
-        <div className="grid min-w-[260px] gap-2 text-sm text-slate-600 sm:grid-cols-2 lg:grid-cols-1">
+        <div className="grid w-full gap-2 text-sm text-slate-600 sm:grid-cols-3 xl:w-[420px] xl:grid-cols-1">
           <Meta label="Owner" value={item.owner} />
           <Meta label="Category" value={label(item.category || item.dependency || item.targetSourceTypes?.join(', ') || 'Not supplied')} />
           <Meta label="Linked queries" value={String(item.queryCoverageCount || item.linkedQueryIds?.length || '—')} />

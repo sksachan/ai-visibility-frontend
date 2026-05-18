@@ -142,7 +142,7 @@ export async function fetchRefreshStatus(brand: string, market: string, runId?: 
   const latestSuccess = runs.find((run: Record<string, unknown>) => ['success', 'successful', 'completed', 'succeeded', 'report_bundle_ready', 'evidence_ready'].includes(String(run.status ?? run.state ?? run.stage ?? '').toLowerCase()));
 
   return {
-    active: Boolean(activeRun || data?.active),
+    active: Boolean(activeRun),
     status: String(activeRun?.status ?? activeRun?.state ?? activeRun?.stage ?? data?.status ?? data?.state ?? data?.stage ?? ''),
     stage: String(activeRun?.stage ?? data?.stage ?? ''),
     runId: String(activeRun?.run_id ?? activeRun?.runId ?? data?.run_id ?? data?.runId ?? data?.target_run_id ?? data?.targetRunId ?? ''),

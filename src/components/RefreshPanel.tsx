@@ -83,8 +83,11 @@ function statusText(status: RunStatusSummary | null, trackedRunId: string) {
   const id = runIdFrom(status, trackedRunId);
   if (!status && trackedRunId) return `Tracking refresh run: ${trackedRunId}. Status not checked yet.`;
   if (!status) return 'Status not checked yet.';
-  if (status.active || id) {
+  if (status.active) {
     return `${niceStage(status.stage || status.status)}${id ? `: ${id}` : ''}. The dashboard will continue showing the last successful report until this completes.`;
+  }
+  if (id && (status.stage || status.status)) {
+    return `${niceStage(status.stage || status.status)}${id ? `: ${id}` : ''}.`;
   }
   if (status.latestSuccessfulRunId) return `Latest successful evidence/report run: ${status.latestSuccessfulRunId}.`;
   return 'No active refresh run detected.';
