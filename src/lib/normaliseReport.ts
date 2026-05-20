@@ -570,7 +570,7 @@ function withAiHygieneOwnedPages(ownedPages: OwnedPage[], hygiene?: AiHygiene): 
 function mapOwnedPages(cmsPayload: AnyRecord): OwnedPage[] {
   return asArray<AnyRecord>(firstDefined(cmsPayload.pages, cmsPayload.owned_readiness, cmsPayload.owned_pages, cmsPayload.rows)).map((page, index) => {
     const readiness = Object.keys(asRecord(page.owned_geo_readiness)).length ? asRecord(page.owned_geo_readiness) : page;
-    const dimensions = asRecord(firstDefined(readiness.dimensions, page.dimensions));
+    const dimensions = asRecord(firstDefined(readiness.geo_dimensions, readiness.dimensions, page.geo_dimensions, page.dimensions));
     const related = asArray<AnyRecord>(firstDefined(page.related_query_evidence, page.related_queries, page.mapped_queries));
     const htmlChanges = asArray<AnyRecord>(firstDefined(page.recommended_html_changes, page.recommended_content_changes, page.recommendations));
     const citations = asArray<AnyRecord>(firstDefined(page.representative_citations_from_related_queries, page.representative_citations, page.citations)).map(mapCitation);
@@ -587,7 +587,7 @@ function mapOwnedPages(cmsPayload: AnyRecord): OwnedPage[] {
         query: asString(query.query),
         visibilityStatus: asString(query.visibility_status)
       })),
-      geoScore: asNumber(firstDefined(readiness.score_120, readiness.geo_readiness_score, page.score_120)),
+      geoScore: asNumber(firstDefined(readiness.current_geo_score_120, readiness.score_120, readiness.geo_readiness_score, readiness.geo_score_120, page.current_geo_score_120, page.score_120, page.geo_score_120)),
       scoreBand: asString(readiness.score_band, ''),
       clarity: asNumber(dimensions.content_clarity),
       semanticDepth: asNumber(dimensions.semantic_depth),

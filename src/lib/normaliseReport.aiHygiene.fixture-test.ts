@@ -57,6 +57,9 @@ const wrappedLatestLikePayload = {
 
 const parsedWrapped = normaliseReport(wrappedLatestLikePayload);
 assert(parsedWrapped.ownedPages.length === 34, 'wrapped Preview Node fixture should parse all 34 owned URLs');
+assert(parsedWrapped.ownedPages[0]?.geoScore === 30, 'canonical current_geo_score_120 should populate owned-page GEO score');
+assert(parsedWrapped.ownedPages[0]?.clarity === 10, 'canonical geo_dimensions should populate owned-page dimension scores');
+assert(parsedWrapped.ownedPages[0]?.structure === 2, 'canonical geo_dimensions.structured_data should populate owned-page structure score');
 assert(parsedWrapped.aiHygiene?.structured_data?.pages_with_json_ld === undefined, 'GEO structured_data score must not be treated as JSON-LD evidence');
 assert(parsedWrapped.aiHygiene?.structured_data?.coverage_pct === undefined, 'missing explicit JSON-LD evidence should be not checked, not 0%');
 assert(parsedWrapped.aiHygiene?.priority === 'not checked', 'missing explicit hygiene should be marked not checked');
