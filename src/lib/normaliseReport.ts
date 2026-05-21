@@ -601,6 +601,8 @@ function mapOwnedPages(cmsPayload: AnyRecord): OwnedPage[] {
       representativeCitations: citations,
       queryMapped: Boolean(firstDefined(page.query_mapped, page.queryMapped, related.length > 0)),
       inventorySource: asString(firstDefined(page.inventory_source, page.inventorySource), related.length ? 'query_mapped' : 'sitemap_inventory'),
+      scoringMethod: asString(firstDefined(page.scoring_method, page.scoringMethod)),
+      scoringNotes: asString(firstDefined(page.scoring_notes, page.scoringNotes)),
       technicalSignals: technicalSignalsFromPage(page)
     };
   });
@@ -938,6 +940,8 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
         recommendedHtmlChanges: asArray<string>(item.recommended_update_focus),
         queryMapped: true,
         inventorySource: asString(firstDefined(item.inventory_source, item.inventorySource), 'query_mapped'),
+        scoringMethod: asString(firstDefined(item.scoring_method, item.scoringMethod)),
+        scoringNotes: asString(firstDefined(item.scoring_notes, item.scoringNotes)),
         technicalSignals: tech
       });
     });
@@ -957,6 +961,8 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
     if (existing) {
       existing.queryMapped = existing.queryMapped || page.queryMapped;
       existing.inventorySource = existing.inventorySource || page.inventorySource;
+      existing.scoringMethod = existing.scoringMethod || page.scoringMethod;
+      existing.scoringNotes = existing.scoringNotes || page.scoringNotes;
       existing.technicalSignals = { ...page.technicalSignals, ...existing.technicalSignals };
       return;
     }

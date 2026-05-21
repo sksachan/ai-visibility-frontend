@@ -102,7 +102,7 @@ function OwnedTable({ pages, cmsUrls, sort, onSort, onOpenCms }: { pages: OwnedP
             <tr key={page.url} className="align-top">
               <td className="max-w-sm px-3 py-4 font-medium text-slate-950"><p className="break-all">{page.url}</p>{page.title && <p className="mt-1 text-xs text-slate-500">{page.title}</p>}<p className="mt-1 text-[11px] uppercase tracking-wide text-slate-400">{page.queryMapped || cmsUrls.has(normaliseUrl(page.url)) ? 'Mapped/CMS' : 'Inventory only'} · {page.inventorySource || 'sitemap_inventory'}</p></td>
               <td className="max-w-xs px-3 py-4 text-slate-600">{page.journeyCategory}</td>
-              <td className="px-3 py-4 font-semibold text-slate-950">{page.geoScore}</td><td className="px-3 py-4">{page.clarity}</td><td className="px-3 py-4">{page.semanticDepth}</td><td className="px-3 py-4">{page.structure}</td><td className="px-3 py-4">{page.evidence}</td><td className="px-3 py-4">{page.freshness}</td><td className="px-3 py-4">{page.faqReadiness ?? 0}</td><td className="px-3 py-4">{page.relatedQueries.length}</td>
+              <td className="px-3 py-4"><p className="font-semibold text-slate-950">{page.geoScore}</p><ScoreMethod page={page} /></td><td className="px-3 py-4">{page.clarity}</td><td className="px-3 py-4">{page.semanticDepth}</td><td className="px-3 py-4">{page.structure}</td><td className="px-3 py-4">{page.evidence}</td><td className="px-3 py-4">{page.freshness}</td><td className="px-3 py-4">{page.faqReadiness ?? 0}</td><td className="px-3 py-4">{page.relatedQueries.length}</td>
               <td className="px-3 py-4"><TechnicalSignals page={page} /></td>
               <td className="px-3 py-4">{cmsUrls.has(normaliseUrl(page.url)) ? <button onClick={() => onOpenCms?.(page.url)} className="rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white">Open CMS</button> : <span className="text-xs text-slate-400">No CMS copy</span>}</td>
             </tr>
@@ -113,11 +113,28 @@ function OwnedTable({ pages, cmsUrls, sort, onSort, onOpenCms }: { pages: OwnedP
   );
 }
 
+function scoreMethodLabel(method?: string) {
+  if (!method) return '';
+  if (method.startsWith('explicit')) return 'Page GEO';
+  if (method.startsWith('crawl_evidence')) return 'Crawl scored';
+  if (method.startsWith('fallback_limited')) return 'Fallback';
+  return method.replace(/_/g, ' ');
+}
+
+function ScoreMethod({ page }: { page: OwnedPage }) {
+  const label = scoreMethodLabel(page.scoringMethod);
+  if (!label) return null;
+  const isFallback = page.scoringMethod?.startsWith('fallback_limited');
+  const tone = isFallback ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-200 bg-slate-50 text-slate-600';
+  return <span title={page.scoringNotes || undefined} className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tone}`}>{label}</span>;
+}
+
 function OwnedPageCard({ page }: { page: OwnedPage }) {
   return (
     <div className="rounded-xl bg-slate-50 p-3">
       <p className="break-all text-sm font-semibold text-slate-900">{page.url}</p>
-      <p className="mt-1 text-xs text-slate-500">{page.scoreBand || 'unbanded'} · {page.evidenceMatchStatus}</p>
+      <p className="mt-1 text-xs text-slate-500">{page.scoreBand || 'unbanded'} · {page.evidenceMatchStatus}{page.scoringMethod ? ` · ${scoreMethodLabel(page.scoringMethod)}` : ''}</p>
+      {page.scoringNotes ? <p className="mt-1 text-xs leading-5 text-slate-500">{page.scoringNotes}</p> : null}
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">
         {page.diagnostics.map((diag) => <li key={diag}>{diag}</li>)}
       </ul>

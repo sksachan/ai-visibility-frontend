@@ -120,6 +120,8 @@ export interface OwnedPage {
   representativeCitations?: CitationExample[];
   queryMapped?: boolean;
   inventorySource?: string;
+  scoringMethod?: string;
+  scoringNotes?: string;
   technicalSignals?: { jsonLdPresent?: boolean; schemaTypes?: string[]; robotsMeta?: string; canonicalUrl?: string; metaDescriptionPresent?: boolean; crawlStatus?: string; wordCount?: number; markdownChars?: number };
 }
 

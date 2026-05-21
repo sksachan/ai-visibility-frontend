@@ -17,7 +17,7 @@ const sections = [
     summary: 'The pipeline creates a traceable chain from brand topics to query evidence, crawl evidence and recommendations.',
     items: [
       ['Query portfolio', 'Queries can be supplied manually, reused from a stored portfolio, or generated synthetically through the Brand Topic Query Builder. The query portfolio defines the scope of the audit.'],
-      ['Owned URL mapping', 'The Evidence Service reads sitemap inventory, maps the most relevant owned URLs to each query, and keeps the configured maximum owned URLs per query.'],
+      ['Owned URL mapping', 'The Evidence Service reads sitemap inventory and maps the most relevant owned URLs to each query for intent matching. Mapping affects CMS/PR prioritisation, but page-level GEO readiness remains a separate page-intrinsic score.'],
       ['AI citation evidence', 'SerpAPI Google AI Mode evidence can be freshly collected or reused from a previous evidence run. Reuse mode allows CMS and crawl testing without spending new SerpAPI calls.'],
       ['Crawling', 'Owned and external pages can be crawled independently. Successful crawl evidence includes title, canonical URL, metadata, schema types, extracted text, word count and markdown size.'],
       ['Auditor synthesis', 'The Auditor consumes the compact evidence bundle and produces query diagnostics, GEO scores, CMS modules, PR opportunities and an action checklist.']
@@ -38,11 +38,13 @@ const sections = [
     title: '4. Owned-page GEO readiness scoring logic',
     summary: 'GEO readiness measures whether an owned page is likely to be extracted, cited or used by AI answer systems.',
     items: [
-      ['Answer-first clarity', 'Rewards direct, query-addressing sections with clear headings and concise answer blocks. Generic product copy scores lower.'],
-      ['Semantic depth', 'Rewards useful coverage of subtopics, comparisons, constraints, trade-offs, FAQs and decision criteria relevant to the mapped query.'],
+      ['Page-intrinsic score', 'Owned-page GEO readiness is scored per page from crawl evidence and site standards. Query mapping is a separate intent-matching layer used for CMS and PR recommendations, not for changing the original page score.'],
+      ['Answer-first clarity', 'Rewards direct, extractable sections with clear headings and concise answer blocks. Generic product copy scores lower.'],
+      ['Semantic depth', 'Rewards useful coverage of subtopics, comparisons, constraints, trade-offs, FAQs and decision criteria present on the page.'],
       ['Evidence and E-E-A-T', 'Rewards proof points, dates, specifications, warranties, source-backed claims, authoritativeness and validation-ready copy.'],
       ['Structured data', 'Rewards JSON-LD/schema and machine-readable context, but does not over-score pages solely because schema exists.'],
-      ['Freshness and FAQ readiness', 'Rewards visible recency cues, update dates, current policy/specification references and extractable question-answer blocks.']
+      ['Freshness and FAQ readiness', 'Rewards visible recency cues, update dates, current policy/specification references and extractable question-answer blocks.'],
+      ['Fallback label', 'If full markdown crawl text is unavailable, the table labels the row as fallback. That limited score uses only metadata and technical signals such as title, canonical URL and JSON-LD/schema, and should be treated as lower-confidence until the page is recrawled.']
     ]
   },
   {
