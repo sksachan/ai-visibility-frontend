@@ -589,12 +589,12 @@ function mapOwnedPages(cmsPayload: AnyRecord): OwnedPage[] {
       })),
       geoScore: asNumber(firstDefined(readiness.current_geo_score_120, readiness.score_120, readiness.geo_readiness_score, readiness.geo_score_120, page.current_geo_score_120, page.score_120, page.geo_score_120)),
       scoreBand: asString(readiness.score_band, ''),
-      clarity: asNumber(dimensions.content_clarity),
+      clarity: asNumber(firstDefined(dimensions.answer_clarity, dimensions.content_clarity)),
       semanticDepth: asNumber(dimensions.semantic_depth),
-      evidence: asNumber(dimensions.eeat_signals),
-      structure: asNumber(dimensions.structured_data),
-      freshness: asNumber(dimensions.freshness_index),
-      authority: asNumber(dimensions.eeat_signals),
+      evidence: asNumber(firstDefined(dimensions.evidence_and_proof, dimensions.evidence, dimensions.eeat_signals)),
+      structure: asNumber(firstDefined(dimensions.structured_extractability, dimensions.structured_data)),
+      freshness: asNumber(firstDefined(dimensions.freshness, dimensions.freshness_index)),
+      authority: asNumber(firstDefined(dimensions.evidence_and_proof, dimensions.authority, dimensions.eeat_signals)),
       faqReadiness: asNumber(dimensions.faq_readiness),
       diagnostics: gaps.length ? gaps : ['No dimension gaps supplied'],
       recommendedHtmlChanges: htmlChanges.map((change) => asString(firstDefined(change.proposed_heading, change.cms_module_type, change.recommendation_id))).filter(Boolean),
@@ -909,19 +909,51 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
     };
   });
   const ownedMap = new Map<string, OwnedPage>();
+  const mergeCanonicalOwnedPage = (existing: OwnedPage, canonical: OwnedPage): OwnedPage => {
+    const relatedByKey = new Map<string, { id: string; query: string; visibilityStatus?: string }>();
+    [...existing.relatedQueries, ...canonical.relatedQueries].forEach((query) => {
+      const key = `${query.id || ''}|${query.query || ''}`;
+      if (key.trim() === '|') return;
+      relatedByKey.set(key, query);
+    });
+    const canonicalJourney = canonical.journeyCategory && canonical.journeyCategory !== 'Unclassified'
+      ? canonical.journeyCategory
+      : existing.journeyCategory;
+
+    return {
+      ...existing,
+      ...canonical,
+      journeyCategory: canonicalJourney,
+      mappedQuery: canonical.mappedQuery && canonical.mappedQuery !== 'No related query supplied'
+        ? canonical.mappedQuery
+        : existing.mappedQuery,
+      relatedQueries: Array.from(relatedByKey.values()),
+      recommendedHtmlChanges: canonical.recommendedHtmlChanges?.length ? canonical.recommendedHtmlChanges : existing.recommendedHtmlChanges,
+      representativeCitations: canonical.representativeCitations?.length ? canonical.representativeCitations : existing.representativeCitations,
+      queryMapped: Boolean(existing.queryMapped || canonical.queryMapped),
+      inventorySource: canonical.inventorySource || existing.inventorySource,
+      technicalSignals: {
+        ...existing.technicalSignals,
+        ...canonical.technicalSignals
+      }
+    };
+  };
   queryWorkbench.forEach((row) => {
     asArray<AnyRecord>(row.mapped_owned_urls).forEach((item) => {
       const url = asString(item.url);
       if (!url) return;
+      const key = urlKey(url);
+      if (!key) return;
       const dims = asRecord(item.geo_dimensions);
-      const existing = ownedMap.get(url);
       const related = { id: asString(row.query_id), query: asString(row.query), visibilityStatus: asString(asRecord(row.current_ai_visibility).status) };
+      const existing = ownedMap.get(key);
       if (existing) {
         existing.relatedQueries.push(related);
+        existing.queryMapped = true;
         return;
       }
       const tech = technicalIndex.get(urlKey(url)) || technicalSignalsFromPage(item);
-      ownedMap.set(url, {
+      ownedMap.set(key, {
         url,
         title: asString(item.title),
         journeyCategory: asString(row.journey_category, 'Unclassified'),
@@ -957,16 +989,12 @@ function mapCanonicalReport(source: AnyRecord): ReportBundle | null {
   explicitOwnedRows.forEach((page) => {
     const key = urlKey(page.url);
     if (!key) return;
-    const existing = Array.from(ownedMap.values()).find((candidate) => urlKey(candidate.url) === key);
+    const existing = ownedMap.get(key);
     if (existing) {
-      existing.queryMapped = existing.queryMapped || page.queryMapped;
-      existing.inventorySource = existing.inventorySource || page.inventorySource;
-      existing.scoringMethod = existing.scoringMethod || page.scoringMethod;
-      existing.scoringNotes = existing.scoringNotes || page.scoringNotes;
-      existing.technicalSignals = { ...page.technicalSignals, ...existing.technicalSignals };
+      ownedMap.set(key, mergeCanonicalOwnedPage(existing, page));
       return;
     }
-    ownedMap.set(page.url, page);
+    ownedMap.set(key, page);
   });
   const linkedIds = (value: unknown): string[] => asArray<AnyRecord>(value).map((q) => asString(firstDefined(q.query_id, q.id))).filter(Boolean);
   const cleanGeneric = (value: unknown): string => {

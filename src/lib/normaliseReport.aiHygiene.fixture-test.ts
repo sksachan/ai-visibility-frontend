@@ -67,6 +67,71 @@ assert(parsedWrapped.aiHygiene?.structured_data?.coverage_pct === undefined, 'mi
 assert(parsedWrapped.aiHygiene?.priority === 'not checked', 'missing explicit hygiene should be marked not checked');
 assert(Boolean(parsedWrapped.parserMeta?.warnings?.some((warning) => warning.includes('not supplied'))), 'missing hygiene should emit a parser warning');
 
+const canonicalOwnedUrl = 'https://www.nissan.co.jp/CONSULTATION/';
+const canonicalOwnedWins = normaliseReport(canonicalBundle({
+  executive: {
+    summary: 'Fixture report',
+    headline_metrics: {
+      ai_visibility_score: 11,
+      query_count: 1,
+      owned_page_count: 1,
+      average_owned_geo_score_120: 31
+    }
+  },
+  query_workbench: [{
+    query_id: 'q013',
+    query: 'online consultation',
+    journey_category: 'Value, offers, finance and total cost of ownership',
+    current_ai_visibility: { score: 0, status: 'not_observed' },
+    mapped_owned_urls: [{
+      url: canonicalOwnedUrl,
+      title: 'Mapped stale consultation page',
+      current_geo_score_120: 31,
+      geo_dimensions: {
+        content_clarity: 8,
+        semantic_depth: 5,
+        structured_data: 2,
+        eeat_signals: 0,
+        freshness_index: 0,
+        faq_readiness: 10
+      },
+      geo_gaps: ['content_clarity', 'semantic_depth', 'structured_data', 'eeat_signals', 'freshness_index', 'faq_readiness'],
+      scoring_method: 'page_geo_v1'
+    }]
+  }],
+  owned_url_readiness: [{
+    url: canonicalOwnedUrl,
+    title: 'Canonical consultation page',
+    current_geo_score_120: 31,
+    geo_dimensions: {
+      content_clarity: 8,
+      semantic_depth: 0,
+      structured_data: 0,
+      eeat_signals: 3,
+      freshness_index: 8,
+      faq_readiness: 12
+    },
+    query_mapped: false,
+    inventory_source: 'sitemap_inventory',
+    scoring_method: 'crawl_evidence_v1',
+    scoring_notes: 'Canonical backend owned readiness row',
+    technical_signals: { json_ld_present: false, crawl_status: 'success', word_count: 402 }
+  }]
+}));
+const canonicalOwnedRow = canonicalOwnedWins.ownedPages.find((page) => page.url === canonicalOwnedUrl);
+assert(canonicalOwnedWins.ownedPages.length === 1, 'duplicate query-mapped and canonical owned rows should collapse to one URL row');
+assert(canonicalOwnedRow?.geoScore === 31, 'canonical owned readiness score should be rendered');
+assert(canonicalOwnedRow?.clarity === 8, 'canonical clarity should be rendered');
+assert(canonicalOwnedRow?.semanticDepth === 0, 'canonical semantic depth should override stale mapped-owned value');
+assert(canonicalOwnedRow?.structure === 0, 'canonical structured-data score should override stale mapped-owned value');
+assert(canonicalOwnedRow?.evidence === 3, 'canonical E-E-A-T score should override stale mapped-owned value');
+assert(canonicalOwnedRow?.freshness === 8, 'canonical freshness score should override stale mapped-owned value');
+assert(canonicalOwnedRow?.faqReadiness === 12, 'canonical FAQ readiness should override stale mapped-owned value');
+assert(canonicalOwnedRow?.scoringMethod === 'crawl_evidence_v1', 'canonical scoring method should override stale mapped-owned scoring method');
+assert(canonicalOwnedRow?.queryMapped === true, 'query linkage from mapped rows should still be preserved');
+assert(canonicalOwnedRow?.relatedQueries.length === 1, 'query linkage metadata should be preserved without driving score columns');
+assert(canonicalOwnedRow?.technicalSignals?.jsonLdPresent === false, 'canonical technical signals should remain source of truth');
+
 const explicitHygiene = normaliseReport(canonicalBundle({
   ai_discoverability_hygiene: {
     priority: 'low',
