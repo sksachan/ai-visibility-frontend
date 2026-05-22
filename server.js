@@ -275,8 +275,8 @@ function candidateEvidenceUrls(req) {
   const base = cleanBase(env('EVIDENCE_SERVICE_URL', 'VITE_EVIDENCE_SERVICE_URL', 'VITE_API_BASE_URL', 'BODHI_EVIDENCE_SERVICE_URL'));
   if (!base) return [];
 
-  const brand = String(req.query.brand || process.env.DEFAULT_BRAND || 'Nissan');
-  const market = String(req.query.market || process.env.DEFAULT_MARKET || 'Japan');
+  const brand = String(req.query.brand || process.env.DEFAULT_BRAND || '');
+  const market = String(req.query.market || process.env.DEFAULT_MARKET || '');
   const domain = String(req.query.domain || process.env.DEFAULT_DOMAIN || '');
   const explicitRunId = String(req.query.runId || req.query.run_id || '').trim();
   const paramsObj = domain ? { brand, market, domain } : { brand, market };
@@ -312,10 +312,18 @@ function normaliseRefreshPayload(body = {}) {
     const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   };
+  // Parse owned_domains and brand_terms from comma-separated strings or arrays.
+  const parseList = (value) => {
+    if (Array.isArray(value)) return value.map(String).filter(Boolean);
+    if (typeof value === 'string' && value.trim()) return value.split(',').map(s => s.trim()).filter(Boolean);
+    return [];
+  };
   return {
-    brand: String(body.brand || process.env.DEFAULT_BRAND || 'Nissan'),
-    market: String(body.market || process.env.DEFAULT_MARKET || 'Japan'),
-    domain: String(body.domain || process.env.DEFAULT_DOMAIN || 'https://www.nissan.co.jp'),
+    brand: String(body.brand || process.env.DEFAULT_BRAND || ''),
+    market: String(body.market || process.env.DEFAULT_MARKET || ''),
+    domain: String(body.domain || process.env.DEFAULT_DOMAIN || ''),
+    owned_domains: parseList(body.ownedDomains ?? body.owned_domains),
+    brand_terms: parseList(body.brandTerms ?? body.brand_terms),
     run_mode: String(body.runMode || body.run_mode || 'reuse_existing_evidence'),
     query_portfolio_mode: String(body.queryPortfolioMode || body.query_portfolio_mode || 'reuse'),
     query_portfolio_id: String(body.queryPortfolioId || body.query_portfolio_id || ''),
@@ -393,7 +401,7 @@ app.get('/api/bodhi/latest', async (req, res) => {
 app.get('/api/evidence/reports/history', async (req, res) => {
   const base = evidenceBase();
   if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured on the frontend Railway service.' }); return; }
-  const params = new URLSearchParams({ brand: String(req.query.brand || process.env.DEFAULT_BRAND || 'Nissan'), market: String(req.query.market || process.env.DEFAULT_MARKET || 'Japan'), limit: String(req.query.limit || '30') });
+  const params = new URLSearchParams({ brand: String(req.query.brand || process.env.DEFAULT_BRAND || ''), market: String(req.query.market || process.env.DEFAULT_MARKET || ''), limit: String(req.query.limit || '30') });
   try {
     const response = await fetch(`${base}/reports/history?${params.toString()}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
     const text = await response.text();
@@ -439,8 +447,8 @@ app.get('/api/evidence/status', async (req, res) => {
     return;
   }
 
-  const brand = String(req.query.brand || process.env.DEFAULT_BRAND || 'Nissan');
-  const market = String(req.query.market || process.env.DEFAULT_MARKET || 'Japan');
+  const brand = String(req.query.brand || process.env.DEFAULT_BRAND || '');
+  const market = String(req.query.market || process.env.DEFAULT_MARKET || '');
   const runId = String(req.query.runId || req.query.run_id || '').trim();
   const params = new URLSearchParams({ brand, market }).toString();
   try {
@@ -475,6 +483,106 @@ app.post('/api/evidence/full-refresh', async (req, res) => {
   } catch (error) {
     res.status(502).json({ error: error instanceof Error ? error.message : String(error), evidenceServiceUrl: base });
   }
+});
+
+// ── Brand configuration proxy routes ──────────────────────────────────────────
+
+app.get('/api/evidence/brands', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  const params = new URLSearchParams();
+  if (req.query.brand) params.set('brand', String(req.query.brand));
+  if (req.query.market) params.set('market', String(req.query.market));
+  try {
+    const response = await fetch(`${base}/brands?${params.toString()}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+});
+
+app.get('/api/evidence/brands/:brand/:market', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  try {
+    const response = await fetch(`${base}/brands/${encodeURIComponent(req.params.brand)}/${encodeURIComponent(req.params.market)}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+});
+
+app.post('/api/evidence/brands', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  try {
+    const response = await fetch(`${base}/brands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+});
+
+app.delete('/api/evidence/brands/:brand/:market', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  try {
+    const response = await fetch(`${base}/brands/${encodeURIComponent(req.params.brand)}/${encodeURIComponent(req.params.market)}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' }
+    });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+});
+
+// ── Portfolio upload/template/validate proxy routes ───────────────────────────
+
+app.post('/api/evidence/portfolios/upload', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  const params = new URLSearchParams();
+  if (req.query.brand) params.set('brand', String(req.query.brand));
+  if (req.query.market) params.set('market', String(req.query.market));
+  if (req.query.domain) params.set('domain', String(req.query.domain));
+  try {
+    const response = await fetch(`${base}/portfolios/upload?${params.toString()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+});
+
+app.get('/api/evidence/portfolios/template', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  const params = new URLSearchParams();
+  if (req.query.brand) params.set('brand', String(req.query.brand));
+  if (req.query.market) params.set('market', String(req.query.market));
+  if (req.query.domain) params.set('domain', String(req.query.domain));
+  try {
+    const response = await fetch(`${base}/portfolios/template?${params.toString()}`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
+});
+
+app.post('/api/evidence/portfolios/validate', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured.' }); return; }
+  try {
+    const response = await fetch(`${base}/portfolios/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error) }); }
 });
 
 app.use(express.static(distDir));

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, CircleDashed, PlayCircle, RefreshCcw, XCircle } from 'lucide-react';
-import { fetchRefreshStatus, refreshEvidence, type RunStatusSummary } from '../lib/api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircle2, CircleDashed, Download, PlayCircle, RefreshCcw, Save, Trash2, Upload, XCircle } from 'lucide-react';
+import { fetchRefreshStatus, refreshEvidence, fetchBrandConfigs, saveBrandConfig, deleteBrandConfig, fetchPortfolioTemplate, uploadPortfolio, validatePortfolio, type RunStatusSummary, type BrandConfig, type PortfolioValidationResult } from '../lib/api';
 import { Card, SectionTitle } from './ui';
 
 const failedStages = new Set(['failed', 'error', 'cancelled', 'canceled']);
@@ -116,8 +116,12 @@ function valueFromRaw(raw: unknown, keys: string[]): string {
   return '';
 }
 
-export function RefreshPanel({ brand, market }: { brand: string; market: string }) {
-  const [domain, setDomain] = useState('https://www.nissan.co.jp');
+export function RefreshPanel({ brand: defaultBrand, market: defaultMarket }: { brand: string; market: string }) {
+  const [brand, setBrand] = useState(defaultBrand || '');
+  const [market, setMarket] = useState(defaultMarket || '');
+  const [domain, setDomain] = useState('');
+  const [ownedDomains, setOwnedDomains] = useState('');
+  const [brandTerms, setBrandTerms] = useState('');
   const [queryLimit, setQueryLimit] = useState(5);
   const [runMode, setRunMode] = useState('fresh_mapping');
   const [queryPortfolioMode, setQueryPortfolioMode] = useState('synthetic');
@@ -143,6 +147,154 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+
+  // Brand config state
+  const [brandConfigs, setBrandConfigs] = useState<BrandConfig[]>([]);
+  const [selectedBrandKey, setSelectedBrandKey] = useState('');
+  const [brandConfigsLoading, setBrandConfigsLoading] = useState(false);
+
+  // Portfolio upload state
+  const [portfolioJson, setPortfolioJson] = useState('');
+  const [portfolioValidation, setPortfolioValidation] = useState<PortfolioValidationResult | null>(null);
+  const [portfolioUploading, setPortfolioUploading] = useState(false);
+  const portfolioFileRef = useRef<HTMLInputElement>(null);
+
+  // Load brand configs on mount
+  const loadBrandConfigs = useCallback(async () => {
+    setBrandConfigsLoading(true);
+    try {
+      const configs = await fetchBrandConfigs();
+      setBrandConfigs(configs);
+    } catch {
+      // Brand configs are optional; don't block the UI
+    } finally {
+      setBrandConfigsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadBrandConfigs(); }, [loadBrandConfigs]);
+
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [deletingConfig, setDeletingConfig] = useState(false);
+  const [configNotice, setConfigNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+
+  // Auto-populate from selected brand config
+  function applyBrandConfig(key: string) {
+    setSelectedBrandKey(key);
+    if (!key) return;
+    const config = brandConfigs.find(c => `${c.brand}__${c.market}` === key);
+    if (!config) return;
+    setBrand(config.brand);
+    setMarket(config.market);
+    setDomain(config.domain || '');
+    setOwnedDomains(config.owned_domains?.join(', ') || '');
+    setBrandTerms(config.brand_terms?.join(', ') || '');
+    setLanguage(config.language || 'English');
+    setSitemapUrl(config.default_sitemap_url || '');
+    setSeedTopics(config.default_seed_topics || '');
+    setTopicCount(config.default_topic_count || 8);
+    setQueriesPerTopic(config.default_queries_per_topic || 6);
+    setQueryLimit(config.default_query_limit || 50);
+    setPortfolioGoal(config.default_portfolio_goal || 'AI answer visibility audit query portfolio.');
+  }
+
+  // Save current form values as a brand config
+  async function onSaveBrandConfig() {
+    if (!brand.trim() || !market.trim()) {
+      setConfigNotice({ tone: 'error', message: 'Brand and Market are required to save a configuration.' });
+      return;
+    }
+    setSavingConfig(true);
+    setConfigNotice(null);
+    try {
+      await saveBrandConfig({
+        brand: brand.trim(),
+        market: market.trim(),
+        domain: domain.trim() || undefined,
+        owned_domains: ownedDomains.trim() ? ownedDomains.split(',').map(s => s.trim()).filter(Boolean) : [],
+        brand_terms: brandTerms.trim() ? brandTerms.split(',').map(s => s.trim()).filter(Boolean) : [],
+        language,
+        default_sitemap_url: sitemapUrl.trim() || undefined,
+        default_seed_topics: seedTopics.trim() || undefined,
+        default_topic_count: topicCount,
+        default_queries_per_topic: queriesPerTopic,
+        default_query_limit: queryLimit,
+        default_portfolio_goal: portfolioGoal.trim() || undefined,
+      });
+      setConfigNotice({ tone: 'success', message: `Brand config saved for ${brand} / ${market}.` });
+      setSelectedBrandKey(`${brand}__${market}`);
+      await loadBrandConfigs();
+    } catch (err) {
+      setConfigNotice({ tone: 'error', message: err instanceof Error ? err.message : 'Failed to save brand config.' });
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
+  // Delete selected brand config
+  async function onDeleteBrandConfig() {
+    if (!selectedBrandKey) return;
+    const config = brandConfigs.find(c => `${c.brand}__${c.market}` === selectedBrandKey);
+    if (!config) return;
+    if (!window.confirm(`Delete saved configuration for ${config.brand} / ${config.market}?`)) return;
+    setDeletingConfig(true);
+    setConfigNotice(null);
+    try {
+      await deleteBrandConfig(config.brand, config.market);
+      setConfigNotice({ tone: 'success', message: `Brand config deleted for ${config.brand} / ${config.market}.` });
+      setSelectedBrandKey('');
+      await loadBrandConfigs();
+    } catch (err) {
+      setConfigNotice({ tone: 'error', message: err instanceof Error ? err.message : 'Failed to delete brand config.' });
+    } finally {
+      setDeletingConfig(false);
+    }
+  }
+
+  // Portfolio file upload handler
+  async function onPortfolioFileUpload(file: File | undefined) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setPortfolioJson(text);
+      // Auto-validate
+      const parsed = JSON.parse(text);
+      const result = await validatePortfolio(parsed);
+      setPortfolioValidation(result);
+    } catch (err) {
+      setPortfolioValidation({ status: 'error', errors: [err instanceof Error ? err.message : 'Invalid JSON file'] });
+    } finally {
+      if (portfolioFileRef.current) portfolioFileRef.current.value = '';
+    }
+  }
+
+  // Validate pasted JSON
+  async function onValidatePortfolio() {
+    if (!portfolioJson.trim()) return;
+    try {
+      const parsed = JSON.parse(portfolioJson);
+      const result = await validatePortfolio(parsed);
+      setPortfolioValidation(result);
+    } catch (err) {
+      setPortfolioValidation({ status: 'error', errors: [err instanceof Error ? err.message : 'Invalid JSON'] });
+    }
+  }
+
+  // Download template
+  async function onDownloadTemplate() {
+    try {
+      const template = await fetchPortfolioTemplate(brand, market, domain);
+      const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `portfolio_template_${brand || 'brand'}_${market || 'market'}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to download template');
+    }
+  }
 
   const currentStage = normaliseStage(status?.stage || status?.status);
   const currentPhase = phaseForStage(currentStage);
@@ -183,6 +335,18 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
     setError('');
     setRefreshResult(null);
     try {
+      // Build custom portfolio if upload mode
+      let customPortfolio: Record<string, unknown> | undefined;
+      if (queryPortfolioMode === 'upload' && portfolioJson.trim()) {
+        try {
+          customPortfolio = JSON.parse(portfolioJson);
+        } catch {
+          setError('Invalid portfolio JSON. Please fix the JSON and try again.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const result = await refreshEvidence({
         brand,
         market,
@@ -205,7 +369,10 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
         enableSerpapi,
         enableOwnedCrawl,
         enableExternalCrawl,
-        triggerAuditor
+        triggerAuditor,
+        ownedDomains: ownedDomains.trim() || undefined,
+        brandTerms: brandTerms.trim() || undefined,
+        customPortfolio,
       });
       const id = result.targetRunId || result.evidenceRunId || result.runId || result.jobId || '';
       if (id) setTrackedRunId(id);
@@ -245,9 +412,74 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
           </div>
         </div>
 
+        {/* Brand config selector */}
+        <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+          <label className="text-sm font-medium text-blue-900">Brand configuration
+            <div className="mt-1 flex items-center gap-2">
+              <select
+                className="flex-1 rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm"
+                value={selectedBrandKey}
+                onChange={(e) => applyBrandConfig(e.target.value)}
+              >
+                <option value="">— Select a saved brand —</option>
+                {brandConfigs.map((c) => (
+                  <option key={`${c.brand}__${c.market}`} value={`${c.brand}__${c.market}`}>
+                    {c.brand} / {c.market}{c.domain ? ` (${c.domain})` : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => void loadBrandConfigs()}
+                disabled={brandConfigsLoading}
+                className="inline-flex items-center gap-1 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-700"
+              >
+                <RefreshCcw size={14} /> {brandConfigsLoading ? '...' : 'Refresh'}
+              </button>
+            </div>
+            <span className="mt-1 block text-xs font-normal text-blue-700">Selecting a brand auto-fills all fields below. You can still override any value before starting the refresh.</span>
+          </label>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => void onSaveBrandConfig()}
+              disabled={savingConfig || !brand.trim() || !market.trim()}
+              className="inline-flex items-center gap-1 rounded-xl border border-blue-300 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-100 disabled:opacity-50"
+            >
+              <Save size={14} /> {savingConfig ? 'Saving...' : 'Save current as brand config'}
+            </button>
+            {selectedBrandKey && (
+              <button
+                onClick={() => void onDeleteBrandConfig()}
+                disabled={deletingConfig}
+                className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                <Trash2 size={14} /> {deletingConfig ? 'Deleting...' : 'Delete selected'}
+              </button>
+            )}
+            {configNotice && (
+              <span className={`text-xs font-medium ${configNotice.tone === 'success' ? 'text-emerald-700' : 'text-red-700'}`}>
+                {configNotice.message}
+              </span>
+            )}
+          </div>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
+          <label className="text-sm font-medium text-slate-700">Brand
+            <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={brand} onChange={(e) => setBrand(e.target.value)} placeholder="e.g. Toyota, BMW, Nissan" />
+          </label>
+          <label className="text-sm font-medium text-slate-700">Market
+            <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={market} onChange={(e) => setMarket(e.target.value)} placeholder="e.g. Germany, Japan, USA" />
+          </label>
           <label className="text-sm font-medium text-slate-700">Domain
-            <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={domain} onChange={(e) => setDomain(e.target.value)} />
+            <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="e.g. https://www.toyota.de" />
+          </label>
+          <label className="text-sm font-medium text-slate-700 md:col-span-2">Owned domains (comma-separated)
+            <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={ownedDomains} onChange={(e) => setOwnedDomains(e.target.value)} placeholder="e.g. toyota.de, www.toyota.de, press.toyota.de" />
+            <span className="mt-1 block text-xs font-normal text-slate-500">Domains the brand owns. Used for owned vs external URL classification. Auto-derived from domain if left blank.</span>
+          </label>
+          <label className="text-sm font-medium text-slate-700">Brand terms (comma-separated)
+            <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={brandTerms} onChange={(e) => setBrandTerms(e.target.value)} placeholder="e.g. Toyota, トヨタ, Corolla, RAV4" />
+            <span className="mt-1 block text-xs font-normal text-slate-500">Brand-specific terms for stop-word filtering and classifier logic.</span>
           </label>
           <label className="text-sm font-medium text-slate-700">Run mode
             <select className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={runMode} onChange={(e) => setRunMode(e.target.value)}>
@@ -262,6 +494,7 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
           <label className="text-sm font-medium text-slate-700">Query portfolio mode
             <select className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={queryPortfolioMode} onChange={(e) => setQueryPortfolioMode(e.target.value)}>
               <option value="synthetic">Synthetic via Bodhi DeepResearch workflow</option>
+              <option value="upload">Upload custom portfolio</option>
               <option value="manual">Manual / stored portfolio ID</option>
               <option value="reuse">Reuse existing portfolio</option>
             </select>
@@ -269,6 +502,48 @@ export function RefreshPanel({ brand, market }: { brand: string; market: string 
           <label className="text-sm font-medium text-slate-700">Existing portfolio ID
             <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={queryPortfolioId} onChange={(e) => setQueryPortfolioId(e.target.value)} placeholder="Optional; identifies the query portfolio only" />
           </label>
+
+          {/* Portfolio upload UI — shown when mode is 'upload' */}
+          {queryPortfolioMode === 'upload' && (
+            <div className="md:col-span-3 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-amber-900">Custom query portfolio</p>
+                <button onClick={() => void onDownloadTemplate()} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                  <Download size={14} /> Download template
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => portfolioFileRef.current?.click()} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100">
+                  <Upload size={14} /> Upload JSON file
+                </button>
+                <input ref={portfolioFileRef} className="hidden" type="file" accept="application/json,.json" onChange={(e) => void onPortfolioFileUpload(e.target.files?.[0])} />
+                <span className="text-xs text-amber-700">or paste JSON below</span>
+              </div>
+              <textarea
+                className="min-h-32 w-full rounded-xl border border-amber-200 bg-white px-3 py-2 font-mono text-xs"
+                value={portfolioJson}
+                onChange={(e) => { setPortfolioJson(e.target.value); setPortfolioValidation(null); }}
+                placeholder='{\n  "topics": [{"topic": "Electric vehicles"}],\n  "queries": [{"query_id": "q001", "query": "best electric SUV 2025", "topic": "Electric vehicles", "query_type": "non_branded", "journey_stage": "consideration"}]\n}'
+              />
+              <div className="flex items-center gap-2">
+                <button onClick={() => void onValidatePortfolio()} disabled={!portfolioJson.trim()} className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
+                  Validate portfolio
+                </button>
+                {portfolioValidation && (
+                  <span className={`text-xs font-medium ${portfolioValidation.status === 'validation_failed' || portfolioValidation.status === 'error' ? 'text-red-700' : 'text-emerald-700'}`}>
+                    {portfolioValidation.status === 'error' ? `Error: ${(portfolioValidation.errors || [])[0] || 'Unknown'}` : portfolioValidation.validation?.valid ? `\u2713 Valid — ${portfolioValidation.validation.stats?.query_count || 0} queries, ${portfolioValidation.validation.stats?.topic_count || 0} topics` : `\u2717 ${(portfolioValidation.errors || portfolioValidation.validation?.errors || []).slice(0, 3).join('; ')}`}
+                  </span>
+                )}
+              </div>
+              {portfolioValidation?.validation?.warnings && portfolioValidation.validation.warnings.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-100 px-3 py-2 text-xs text-amber-800">
+                  <p className="font-semibold">Warnings:</p>
+                  <ul className="mt-1 list-disc pl-4">{portfolioValidation.validation.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          )}
+
           <label className="text-sm font-medium text-slate-700 md:col-span-2">Reuse citation evidence run ID
             <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2" value={sourceRunId} onChange={(e) => setSourceRunId(e.target.value)} placeholder="Optional; e.g. evidence_nissan_japan_1779101052_5d1acd" />
             <span className="mt-1 block text-xs font-normal text-slate-500">Use this when SerpAPI is off but you want to reuse AI citation rows from an earlier evidence run.</span>
