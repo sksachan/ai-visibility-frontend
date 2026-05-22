@@ -58,10 +58,8 @@ export default function App() {
   async function pollRefreshStatus() {
     try {
       setRefreshStatus(await fetchRefreshStatus(brand, market));
-    } catch (error) {
+    } catch {
       // Status is advisory only; never block report loading or manual upload.
-      // Suppress network errors silently — the dashboard remains functional.
-      if (import.meta.env.DEV) console.debug('[pollRefreshStatus] suppressed:', error);
     }
   }
 
