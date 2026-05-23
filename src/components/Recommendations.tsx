@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import type { ActionItem, RecommendationModule, ReportBundle, CmsCopyModule } from '../types/report';
+import type { ActionItem, RecommendationModule, ReportBundle, CmsCopyModule, AdvancedGeoAsset, AdvancedPrAssetPack } from '../types/report';
 import { Badge, Card, SectionTitle } from './ui';
 
 const tone = (priority: string) => priority === 'High' ? 'high' : priority === 'Medium' ? 'medium' : 'low';
@@ -99,14 +99,111 @@ function RecommendationCard({ item, type, highlighted }: { item: RecommendationM
 
 function CmsCardBody({ item }: { item: RecommendationModule }) {
   const modules = item.copyModules?.length ? item.copyModules.slice(0, 3) : fallbackCmsModules(item);
+  const asset = item.advancedGeoAsset;
+  const [activeTab, setActiveTab] = useState<'brief' | 'html' | 'jsonld' | 'facts' | 'validation'>('brief');
+  const hasTabs = !!asset;
   return (
     <div className="mt-4 space-y-3">
-      {modules.map((module, index) => <CmsCopyBlock key={`${module.moduleId}-${index}`} module={module} item={item} index={index} />)}
+      {hasTabs && (
+        <div className="flex gap-1 overflow-x-auto">
+          {(['brief', 'html', 'jsonld', 'facts', 'validation'] as const).map((tab) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold ${activeTab === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              {tab === 'brief' ? 'Brief' : tab === 'html' ? 'HTML' : tab === 'jsonld' ? 'JSON-LD' : tab === 'facts' ? 'Facts' : 'Validation'}
+            </button>
+          ))}
+        </div>
+      )}
+      {(!hasTabs || activeTab === 'brief') && (
+        <>
+          {modules.map((module, index) => <CmsCopyBlock key={`${module.moduleId}-${index}`} module={module} item={item} index={index} />)}
+          {asset && asset.direct_answer_40_words && (
+            <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Direct Answer (under 40 words)</p>
+              <p className="mt-1 text-slate-800">{asset.direct_answer_40_words}</p>
+              <p className="mt-1 text-xs text-blue-500">Expected impact: {asset.expected_impact_score_10}/10</p>
+            </div>
+          )}
+        </>
+      )}
+      {hasTabs && activeTab === 'html' && asset && (
+        <div className="rounded-xl bg-white p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">HTML Component Preview</p>
+          <div className="rounded-lg bg-slate-50 p-4 border border-slate-200" dangerouslySetInnerHTML={{ __html: asset.html_component }} />
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-600">View source HTML</summary>
+            <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-green-300">{asset.html_component}</pre>
+          </details>
+        </div>
+      )}
+      {hasTabs && activeTab === 'jsonld' && asset && (
+        <div className="rounded-xl bg-white p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">JSON-LD Extension</p>
+          <p className="text-xs text-slate-500 mb-2">Strategy: <span className="font-semibold">{asset.json_ld_strategy}</span>{asset.target_anchor_id && <> · Anchor: <code className="text-xs">{asset.target_anchor_id}</code></>}</p>
+          {asset.json_ld_script && <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-amber-300">{asset.json_ld_script}</pre>}
+          {asset.json_ld_merge_notes.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-slate-500">{asset.json_ld_merge_notes.map((note, i) => <li key={i}>• {note}</li>)}</ul>
+          )}
+        </div>
+      )}
+      {hasTabs && activeTab === 'facts' && asset && <FactsDisplay facts={asset.facts_used} />}
+      {hasTabs && activeTab === 'validation' && asset && <ValidationDisplay asset={asset} />}
       <details className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-600">
         <summary className="cursor-pointer font-semibold text-slate-900">How value score is calculated</summary>
         <p className="mt-2">Value score combines query coverage, low current AI visibility, competitor/external-led status, page GEO gap, priority, and availability of reusable winning patterns. Higher scores indicate page changes expected to move more linked queries and improve both page GEO score and query-level AI visibility on rerun.</p>
       </details>
       <p className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-600"><span className="font-semibold text-slate-900">Evidence basis:</span> {item.evidencePattern}</p>
+    </div>
+  );
+}
+
+function FactsDisplay({ facts }: { facts: Array<{ fact: string; value?: string; unit?: string; source: string; source_context_snippet: string; source_url?: string }> }) {
+  if (!facts.length) return <p className="rounded-xl bg-white p-3 text-sm text-slate-500">No verified facts available for this recommendation.</p>;
+  return (
+    <div className="rounded-xl bg-white p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Verified Facts ({facts.length})</p>
+      <div className="space-y-2">
+        {facts.map((fact, i) => (
+          <div key={i} className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="font-semibold text-slate-800">{fact.fact}</span>
+              {fact.value && <span className="text-slate-600">{fact.value}{fact.unit ? ` ${fact.unit}` : ''}</span>}
+            </div>
+            <p className="mt-1 text-slate-500">Source: <span className="font-semibold">{fact.source.replace(/_/g, ' ')}</span></p>
+            <p className="mt-0.5 text-slate-400 break-all">Snippet: {fact.source_context_snippet.slice(0, 200)}</p>
+            {fact.source_url && <p className="mt-0.5 text-blue-400 break-all">{fact.source_url}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ValidationDisplay({ asset }: { asset: AdvancedGeoAsset }) {
+  const hasFlags = asset.validation_flags.length > 0;
+  const needsLegal = asset.legal_review_required;
+  return (
+    <div className="rounded-xl bg-white p-3 space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Validation Status</p>
+      {needsLegal && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+          <span className="font-semibold">Legal Review Required</span> — This recommendation contains pricing, warranty, or compliance-sensitive claims.
+        </div>
+      )}
+      {hasFlags ? (
+        <div className="space-y-1">
+          {asset.validation_flags.map((flag, i) => (
+            <div key={i} className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+              <span className="font-semibold">Warning:</span> {flag}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">
+          All facts verified. No validation issues detected.
+        </div>
+      )}
+      <p className="text-xs text-slate-400">Language: {asset.localized_copy_language} · Impact score: {asset.expected_impact_score_10}/10</p>
     </div>
   );
 }
@@ -145,12 +242,78 @@ function fallbackCmsModules(item: RecommendationModule): CmsCopyModule[] {
 }
 
 function PrCardBody({ item }: { item: RecommendationModule }) {
+  const pack = item.advancedPrAssetPack;
+  const [activeTab, setActiveTab] = useState<'overview' | 'asset' | 'publishers' | 'triggers' | 'requirements' | 'validation'>('overview');
+  const hasTabs = !!pack;
   return (
     <div className="mt-4 space-y-3">
-      <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700">{item.recommendation}</p>
-      {item.whyItMatters ? <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700"><span className="font-semibold text-slate-900">Why it matters:</span> {item.whyItMatters}</p> : null}
-      {item.evidenceBasis || item.evidencePattern ? <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-600"><span className="font-semibold text-slate-900">Evidence basis:</span> {item.evidenceBasis || item.evidencePattern}</p> : null}
-      {item.observedExternalDomains?.length ? <p className="text-xs text-slate-500">Observed domains: {item.observedExternalDomains.slice(0, 10).map((d) => `${d.domain}${d.count ? ` (${d.count})` : ''}`).join(', ')}</p> : null}
+      {hasTabs && (
+        <div className="flex gap-1 overflow-x-auto">
+          {(['overview', 'asset', 'publishers', 'triggers', 'requirements', 'validation'] as const).map((tab) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold ${activeTab === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              {tab === 'overview' ? 'Overview' : tab === 'asset' ? 'Asset Pack' : tab === 'publishers' ? 'Publisher Targets' : tab === 'triggers' ? 'Semantic Triggers' : tab === 'requirements' ? 'Requirements' : 'Validation'}
+            </button>
+          ))}
+        </div>
+      )}
+      {(!hasTabs || activeTab === 'overview') && (
+        <>
+          <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700">{item.recommendation}</p>
+          {item.whyItMatters ? <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700"><span className="font-semibold text-slate-900">Why it matters:</span> {item.whyItMatters}</p> : null}
+          {item.evidenceBasis || item.evidencePattern ? <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-600"><span className="font-semibold text-slate-900">Evidence basis:</span> {item.evidenceBasis || item.evidencePattern}</p> : null}
+          {item.observedExternalDomains?.length ? <p className="text-xs text-slate-500">Observed domains: {item.observedExternalDomains.slice(0, 10).map((d) => `${d.domain}${d.count ? ` (${d.count})` : ''}`).join(', ')}</p> : null}
+        </>
+      )}
+      {hasTabs && activeTab === 'asset' && pack && (
+        <div className="rounded-xl bg-white p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Asset Pack Details</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Asset Name</p><p className="text-sm font-semibold text-slate-800">{pack.asset_name}</p></div>
+            <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Asset Type</p><p className="text-sm font-semibold text-slate-800">{pack.asset_type.replace(/_/g, ' ')}</p></div>
+          </div>
+          <div className="rounded-lg bg-blue-50 border border-blue-200 p-2"><p className="text-xs text-blue-600 font-semibold">Information Gain Trigger</p><p className="text-sm text-slate-700">{pack.information_gain_trigger}</p></div>
+          <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Suggested Headline</p><p className="text-sm font-semibold text-slate-800">{pack.suggested_headline}</p></div>
+          <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Briefing Copy</p><p className="text-sm text-slate-700">{pack.briefing_copy}</p></div>
+          {pack.unique_brand_data_required.length > 0 && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-2">
+              <p className="text-xs text-amber-600 font-semibold">Brand Data Required</p>
+              <ul className="mt-1 space-y-0.5">{pack.unique_brand_data_required.map((d, i) => <li key={i} className="text-xs text-slate-600">• {d.replace(/_/g, ' ')}</li>)}</ul>
+            </div>
+          )}
+        </div>
+      )}
+      {hasTabs && activeTab === 'publishers' && pack && (
+        <div className="rounded-xl bg-white p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Publisher Targets</p>
+          <div className="flex flex-wrap gap-1">{pack.target_publisher_types.map((t, i) => <span key={i} className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">{t.replace(/_/g, ' ')}</span>)}</div>
+          {pack.target_domains_observed.length > 0 && (
+            <><p className="text-xs font-semibold text-slate-500 mt-2">Observed Domains</p>
+            <div className="flex flex-wrap gap-1">{pack.target_domains_observed.map((d, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{d}</span>)}</div></>
+          )}
+        </div>
+      )}
+      {hasTabs && activeTab === 'triggers' && pack && (
+        <div className="rounded-xl bg-white p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Semantic Triggers</p>
+          <div className="flex flex-wrap gap-1">{pack.semantic_triggers.map((t, i) => <span key={i} className="rounded-full bg-purple-100 px-2 py-1 text-xs text-purple-700">{t.replace(/_/g, ' ')}</span>)}</div>
+        </div>
+      )}
+      {hasTabs && activeTab === 'requirements' && pack && (
+        <div className="rounded-xl bg-white p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Publisher Format Requirements</p>
+          <ul className="space-y-1">{pack.publisher_format_requirements.map((r, i) => <li key={i} className="text-xs text-slate-600">• {r.replace(/_/g, ' ')}</li>)}</ul>
+        </div>
+      )}
+      {hasTabs && activeTab === 'validation' && pack && (
+        <div className="rounded-xl bg-white p-3 space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Validation</p>
+          {pack.validation_flags.length > 0 ? (
+            pack.validation_flags.map((flag, i) => <div key={i} className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800"><span className="font-semibold">Warning:</span> {flag}</div>)
+          ) : (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-800">No validation issues detected.</div>
+          )}
+        </div>
+      )}
       <details className="rounded-xl bg-white p-3 text-xs leading-5 text-slate-600">
         <summary className="cursor-pointer font-semibold text-slate-900">How value score is calculated</summary>
         <p className="mt-2">Value score combines grouped query coverage, source-type influence, external-led or competitor-led status, citation-domain concentration, and priority. PR actions are not tied to owned URLs; success is tracked by grouped-query AI visibility movement, reduced external-led/competitor-led counts, and improved owned or neutral-source citation mix after rerun.</p>
@@ -229,7 +392,7 @@ function ActionRow({ item }: { item: ActionItem }) {
         <div className="grid w-full gap-2 text-sm text-slate-600 sm:grid-cols-3 xl:w-[420px] xl:grid-cols-1">
           <Meta label="Owner" value={item.owner} />
           <Meta label="Category" value={label(item.category || item.dependency || item.targetSourceTypes?.join(', ') || 'Not supplied')} />
-          <Meta label="Linked queries" value={String(item.queryCoverageCount || item.linkedQueryIds?.length || '—')} />
+          <Meta label="Linked queries" value={String(item.queryCoverageCount || item.linkedQueryIds?.length || 0)} />
         </div>
       </div>
     </article>

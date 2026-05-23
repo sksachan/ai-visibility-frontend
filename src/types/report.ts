@@ -142,6 +142,45 @@ export interface CmsCopyModule {
   aiVisibilityTracking?: string;
 }
 
+export interface FactUsed {
+  fact: string;
+  value?: string;
+  unit?: string;
+  source: 'owned_page' | 'existing_json_ld' | 'crawl_metadata' | 'approved_input';
+  source_context_snippet: string;
+  source_url?: string;
+}
+
+export interface AdvancedGeoAsset {
+  schema_version: 'advanced_geo_asset.v1';
+  expected_impact_score_10: number;
+  direct_answer_40_words: string;
+  html_component: string;
+  json_ld_strategy: 'standalone_id_extension' | 'full_page_merge_patch';
+  target_anchor_id?: string;
+  json_ld_script: string;
+  json_ld_merge_notes: string[];
+  localized_copy_language: string;
+  facts_used: FactUsed[];
+  validation_flags: string[];
+  legal_review_required: boolean;
+}
+
+export interface AdvancedPrAssetPack {
+  schema_version: 'advanced_pr_asset_pack.v1';
+  asset_name: string;
+  asset_type: string;
+  information_gain_trigger: string;
+  unique_brand_data_required: string[];
+  target_publisher_types: string[];
+  target_domains_observed: string[];
+  publisher_format_requirements: string[];
+  semantic_triggers: string[];
+  suggested_headline: string;
+  briefing_copy: string;
+  validation_flags: string[];
+}
+
 export interface RecommendationModule {
   title: string;
   targetUrl: string;
@@ -170,6 +209,8 @@ export interface RecommendationModule {
   htmlElement?: string;
   copyModules?: CmsCopyModule[];
   trackingMetrics?: string[];
+  advancedGeoAsset?: AdvancedGeoAsset;
+  advancedPrAssetPack?: AdvancedPrAssetPack;
 }
 
 export interface ActionItem {
