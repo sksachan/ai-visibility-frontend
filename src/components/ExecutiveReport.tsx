@@ -1,5 +1,5 @@
 import type { ReportBundle } from '../types/report';
-import { Card, MetricCard, SectionTitle } from './ui';
+import { WorkspacePanel, MetricCard, SectionHeader } from './ui';
 import { BrandTopicScorecard } from './BrandTopicScorecard';
 
 export function ExecutiveReport({ report }: { report: ReportBundle }) {
@@ -15,26 +15,27 @@ export function ExecutiveReport({ report }: { report: ReportBundle }) {
   const executiveSubline = `AI visibility is ${score.toFixed(1)}/100 and average owned-page GEO readiness is ${geo.toFixed(1)}/120. ${implication}`;
   return (
     <div className="space-y-5">
-      <Card className="!bg-slate-950 !text-white">
-        <p className="text-sm uppercase tracking-[0.2em] text-slate-300">Executive summary</p>
-        <h1 className="mt-3 max-w-5xl text-3xl font-semibold tracking-tight md:text-5xl">
+      {/* Hero card */}
+      <WorkspacePanel className="!bg-gradient-to-br !from-[#0a0a1a] !to-[#0d1117] !border-[var(--accent-blue)]/20">
+        <p className="typo-meta text-[var(--accent-blue)]">Executive summary</p>
+        <h1 className="mt-3 max-w-5xl typo-page text-[var(--text-primary)]">
           {executiveHeadline}
         </h1>
-        <p className="mt-4 max-w-4xl text-base leading-7 text-slate-300 md:text-lg">{executiveSubline}</p>
-        <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-300">
+        <p className="mt-4 max-w-4xl text-[15px] leading-7 text-[var(--text-secondary)]">{executiveSubline}</p>
+        <div className="mt-6 flex flex-wrap gap-3 text-xs text-[var(--text-muted)]">
           <span>Run: {report.runId}</span>
           <span>Evidence date: {report.evidenceDate}</span>
           <span>Market: {report.market}</span>
         </div>
-      </Card>
+      </WorkspacePanel>
 
       {report.parserMeta?.warnings?.length ? (
-        <Card className="border-amber-200 bg-amber-50">
-          <SectionTitle eyebrow="Parser notes" title="Uploaded file parsed with caveats" />
-          <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-amber-900">
+        <WorkspacePanel className="!border-amber-500/30 !bg-amber-500/10">
+          <SectionHeader eyebrow="Parser notes" title="Uploaded file parsed with caveats" />
+          <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-amber-300">
             {report.parserMeta.warnings.map((warning) => <li key={warning}>{warning}</li>)}
           </ul>
-        </Card>
+        </WorkspacePanel>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -64,45 +65,49 @@ export function ExecutiveReport({ report }: { report: ReportBundle }) {
 
 function Narrative({ title, items }: { title: string; items: string[] }) {
   return (
-    <Card>
-      <SectionTitle title={title} />
+    <WorkspacePanel>
+      <SectionHeader title={title} />
       <div className="space-y-3">
         {items.length ? items.map((item) => (
-          <p key={item} className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+          <p key={item} className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-3 text-sm leading-6 text-[var(--text-secondary)]">
             {item}
           </p>
-        )) : <p className="text-sm text-slate-500">No data supplied in uploaded output.</p>}
+        )) : <p className="text-sm text-[var(--text-muted)]">No data supplied in uploaded output.</p>}
       </div>
-    </Card>
+    </WorkspacePanel>
   );
 }
-
 
 function AiHygieneCard({ report }: { report: ReportBundle }) {
   const hygiene = report.aiHygiene;
   if (!hygiene) return null;
   const sd = hygiene.structured_data || {};
   const priority = String(hygiene.priority || 'medium').toLowerCase();
-  const priorityClass = priority === 'high' ? 'border-red-200 bg-red-50 text-red-900' : priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900';
+  const priorityClass = priority === 'high' ? '!border-red-500/30 !bg-red-500/8' : priority === 'low' ? '!border-emerald-500/30 !bg-emerald-500/8' : '!border-amber-500/30 !bg-amber-500/8';
   const schemaCoverage = sd.pages_with_json_ld === undefined || sd.coverage_pct === undefined
     ? 'not checked'
     : `${sd.pages_with_json_ld}/${sd.owned_pages_total ?? 0} pages · ${sd.coverage_pct}%`;
   return (
-    <Card className={priorityClass}>
-      <SectionTitle eyebrow="AI Discoverability Hygiene" title="Priority technical controls for AI crawler and citation readiness">
+    <WorkspacePanel className={priorityClass}>
+      <SectionHeader eyebrow="AI Discoverability Hygiene" title="Priority technical controls for AI crawler and citation readiness">
         LLMs.txt is not mandatory for all AI systems, but it is useful as an explicit guidance layer for AI crawlers and agentic retrieval systems.
-      </SectionTitle>
+      </SectionHeader>
       <div className="grid gap-3 md:grid-cols-4">
         <HygieneMetric label="Robots.txt" value={hygiene.robots_txt?.status || 'not supplied'} />
         <HygieneMetric label="LLMs.txt" value={hygiene.llms_txt?.status || 'not supplied'} />
         <HygieneMetric label="JSON-LD/schema coverage" value={schemaCoverage} />
         <HygieneMetric label="Priority" value={hygiene.priority || 'not supplied'} />
       </div>
-      {hygiene.summary && <p className="mt-3 rounded-xl bg-white/60 p-3 text-sm leading-6">{hygiene.summary}</p>}
-    </Card>
+      {hygiene.summary && <p className="mt-3 rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-3 text-sm leading-6 text-[var(--text-secondary)]">{hygiene.summary}</p>}
+    </WorkspacePanel>
   );
 }
 
 function HygieneMetric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-white/70 p-3"><p className="text-xs uppercase tracking-wide opacity-70">{label}</p><p className="mt-1 font-semibold">{value}</p></div>;
+  return (
+    <div className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-3">
+      <p className="typo-meta text-[var(--text-muted)]">{label}</p>
+      <p className="mt-1 font-semibold text-[var(--text-primary)]">{value}</p>
+    </div>
+  );
 }

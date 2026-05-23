@@ -1,6 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
 import type { ActionItem, RecommendationModule, ReportBundle, CmsCopyModule, AdvancedGeoAsset, AdvancedPrAssetPack } from '../types/report';
-import { Badge, Card, SectionTitle } from './ui';
+import { Badge, WorkspacePanel, SectionHeader, DarkButton, StatusPill } from './ui';
+
+// Backward-compatible aliases
+const Card = WorkspacePanel;
+const SectionTitle = SectionHeader;
 
 const tone = (priority: string) => priority === 'High' ? 'high' : priority === 'Medium' ? 'medium' : 'low';
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean))).sort();
@@ -13,7 +17,7 @@ export function Recommendations({ report }: { report: ReportBundle }) {
 export function CmsRecommendations({ report, highlightUrl }: { report: ReportBundle; highlightUrl?: string }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+      <div className="rounded-[var(--radius-sm)] border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
         <p className="font-semibold">⚠️ Disclaimer</p>
         <p className="mt-1">Please review each recommendation with your Brand, Content, and Legal teams before making any changes to live pages.</p>
       </div>
@@ -84,23 +88,23 @@ function RecommendationPanel({ title, eyebrow, items, type, highlightUrl }: { ti
 
 function RecommendationCard({ item, type, highlighted }: { item: RecommendationModule; type: 'cms' | 'pr'; highlighted?: boolean }) {
   return (
-    <div id={type === 'cms' ? `cms-${encodeURIComponent(item.targetUrl)}` : undefined} className={`rounded-2xl border p-4 ${highlighted ? 'border-blue-400 bg-blue-50 ring-2 ring-blue-200' : 'border-slate-200 bg-slate-50'}`}>
+    <div id={type === 'cms' ? `cms-${encodeURIComponent(item.targetUrl)}` : undefined} className={`rounded-[var(--radius-md)] border p-4 ${highlighted ? 'border-[var(--accent-blue)]/40 bg-[var(--accent-blue-soft)] ring-2 ring-[var(--accent-blue)]/20' : 'border-[var(--border-subtle)] bg-[var(--bg-card)]'}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-950">{item.title}</h3>
-          {item.journeyCategory && <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{item.journeyCategory}</p>}
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">{item.title}</h3>
+          {item.journeyCategory && <p className="mt-1 typo-meta text-[var(--text-muted)]">{item.journeyCategory}</p>}
         </div>
         <Badge tone={tone(item.priority)}>{item.priority}</Badge>
       </div>
-      <p className="mt-2 break-all text-sm text-slate-500">Owner: {item.owner} · {type === 'pr' ? 'Source group' : 'Target page'}: {item.targetUrl || 'Grouped opportunity'}</p>
-      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-        {item.queryCoverageCount ? <span className="rounded-full bg-white px-2 py-1">{item.queryCoverageCount} linked queries</span> : null}
-        {item.valueScore ? <span className="rounded-full bg-white px-2 py-1">Value score {item.valueScore}</span> : null}
-        {item.moduleType ? <span className="rounded-full bg-white px-2 py-1">{label(item.moduleType)}</span> : null}
+      <p className="mt-2 break-all text-sm text-[var(--text-muted)]">Owner: {item.owner} · {type === 'pr' ? 'Source group' : 'Target page'}: {item.targetUrl || 'Grouped opportunity'}</p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-[var(--text-muted)]">
+        {item.queryCoverageCount ? <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1">{item.queryCoverageCount} linked queries</span> : null}
+        {item.valueScore ? <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1">Value score {item.valueScore}</span> : null}
+        {item.moduleType ? <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1">{label(item.moduleType)}</span> : null}
       </div>
       {type === 'cms' ? <CmsCardBody item={item} /> : <PrCardBody item={item} />}
-      {item.linkedQueryIds?.length ? <p className="mt-3 text-xs text-slate-500">Linked queries: {item.linkedQueryIds.slice(0, 18).join(', ')}{item.linkedQueryIds.length > 18 ? '…' : ''}</p> : null}
-      {item.validationRequired?.length ? <p className="mt-2 text-xs text-slate-500">Validation required: {item.validationRequired.join(', ')}</p> : null}
+      {item.linkedQueryIds?.length ? <p className="mt-3 text-xs text-[var(--text-muted)]">Linked queries: {item.linkedQueryIds.slice(0, 18).join(', ')}{item.linkedQueryIds.length > 18 ? '…' : ''}</p> : null}
+      {item.validationRequired?.length ? <p className="mt-2 text-xs text-[var(--text-muted)]">Validation required: {item.validationRequired.join(', ')}</p> : null}
     </div>
   );
 }
@@ -116,7 +120,7 @@ function CmsCardBody({ item }: { item: RecommendationModule }) {
     <div className="mt-4 space-y-3">
       <div className="flex gap-1 overflow-x-auto">
         {tabList.map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold ${activeTab === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
+          <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold ${activeTab === tab ? 'bg-[var(--accent-blue)] text-white' : 'bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
             {tabLabels[tab]}
           </button>
         ))}
@@ -124,50 +128,47 @@ function CmsCardBody({ item }: { item: RecommendationModule }) {
       {activeTab === 'brief' && (
         <>
           {modules.map((module, index) => <CmsCopyBlock key={`${module.moduleId}-${index}`} module={module} item={item} index={index} />)}
-          {/* Direct Answer section (issue #8) — query + LLM-generated answer */}
           {asset && asset.direct_answer_40_words && (
-            <div className="rounded-xl bg-blue-50 border border-blue-200 p-3 text-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Direct Answer</p>
-              <p className="mt-1 text-xs text-slate-500">Query: <span className="font-medium text-slate-700">{item.linkedQueryIds?.[0] || 'N/A'}</span></p>
-              <p className="mt-2 text-slate-800 font-medium">{asset.direct_answer_40_words}</p>
+            <div className="rounded-[var(--radius-sm)] bg-[var(--accent-blue-soft)] border border-[var(--accent-blue)]/25 p-3 text-sm">
+              <p className="typo-meta text-[var(--accent-blue)]">Direct Answer</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Query: <span className="font-medium text-[var(--text-secondary)]">{item.linkedQueryIds?.[0] || 'N/A'}</span></p>
+              <p className="mt-2 text-[var(--text-primary)] font-medium">{asset.direct_answer_40_words}</p>
             </div>
           )}
-          {/* Target page as clickable hyperlink (issue #7) */}
           {item.targetUrl && (
-            <p className="text-xs text-slate-500">Target page: <a href={item.targetUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 break-all">{item.targetUrl}</a></p>
+            <p className="text-xs text-[var(--text-muted)]">Target page: <a href={item.targetUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--accent-blue)] underline hover:brightness-125 break-all">{item.targetUrl}</a></p>
           )}
         </>
       )}
       {activeTab === 'jsonld' && asset && (
-        <div className="rounded-xl bg-white p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">JSON-LD Extension</p>
-          <p className="text-xs text-slate-500 mb-2">Strategy: <span className="font-semibold">{asset.json_ld_strategy}</span>{asset.target_anchor_id && <> · Anchor: <code className="text-xs">{asset.target_anchor_id}</code></>}</p>
-          {asset.json_ld_script && <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-amber-300">{asset.json_ld_script}</pre>}
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3">
+          <p className="typo-meta text-[var(--text-muted)] mb-2">JSON-LD Extension</p>
+          <p className="text-xs text-[var(--text-muted)] mb-2">Strategy: <span className="font-semibold text-[var(--text-secondary)]">{asset.json_ld_strategy}</span>{asset.target_anchor_id && <> · Anchor: <code className="text-xs text-[var(--accent-purple)]">{asset.target_anchor_id}</code></>}</p>
+          {asset.json_ld_script && <pre className="overflow-x-auto rounded-[var(--radius-sm)] bg-[var(--bg-app)] border border-[var(--border-subtle)] p-3 text-xs text-amber-300">{asset.json_ld_script}</pre>}
           {asset.json_ld_merge_notes.length > 0 && (
-            <ul className="mt-2 space-y-1 text-xs text-slate-500">{asset.json_ld_merge_notes.map((note, i) => <li key={i}>• {note}</li>)}</ul>
+            <ul className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">{asset.json_ld_merge_notes.map((note, i) => <li key={i}>• {note}</li>)}</ul>
           )}
         </div>
       )}
       {activeTab === 'jsonld' && !asset && (
-        <div className="rounded-xl bg-white p-3 text-sm text-slate-500">No JSON-LD extension data available for this recommendation. JSON-LD will be generated by the Bodhi workflow in future runs.</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">No JSON-LD extension data available for this recommendation. JSON-LD will be generated by the Bodhi workflow in future runs.</div>
       )}
       {activeTab === 'facts' && asset && <FactsDisplay facts={asset.facts_used} />}
       {activeTab === 'facts' && !asset && (
-        <div className="rounded-xl bg-white p-3 text-sm text-slate-500">No verified facts data available. Facts will be extracted from owned page crawl evidence by the Bodhi workflow.</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">No verified facts data available. Facts will be extracted from owned page crawl evidence by the Bodhi workflow.</div>
       )}
       {activeTab === 'faq' && (
-        <div className="rounded-xl bg-white p-3 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">FAQ Suggestions</p>
-          {/* FAQ items from copy modules (issue #9) */}
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 space-y-3">
+          <p className="typo-meta text-[var(--text-muted)]">FAQ Suggestions</p>
           {modules.flatMap((m) => m.faqItems || []).length > 0 ? (
             modules.flatMap((m) => m.faqItems || []).slice(0, 3).map((faq, i) => (
-              <div key={i} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="font-semibold text-slate-900 text-sm">{faq.question}</p>
-                <p className="mt-1 text-sm text-slate-700">{faq.answer}</p>
+              <div key={i} className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-card)] p-3">
+                <p className="font-semibold text-[var(--text-primary)] text-sm">{faq.question}</p>
+                <p className="mt-1 text-sm text-[var(--text-secondary)]">{faq.answer}</p>
               </div>
             ))
           ) : (
-            <p className="text-sm text-slate-500">FAQ content will be generated by the Bodhi FAQ Generator workflow node. Run a new evidence refresh to populate this section.</p>
+            <p className="text-sm text-[var(--text-muted)]">FAQ content will be generated by the Bodhi FAQ Generator workflow node. Run a new evidence refresh to populate this section.</p>
           )}
         </div>
       )}
@@ -176,20 +177,20 @@ function CmsCardBody({ item }: { item: RecommendationModule }) {
 }
 
 function FactsDisplay({ facts }: { facts: Array<{ fact: string; value?: string; unit?: string; source: string; source_context_snippet: string; source_url?: string }> }) {
-  if (!facts.length) return <p className="rounded-xl bg-white p-3 text-sm text-slate-500">No verified facts available for this recommendation.</p>;
+  if (!facts.length) return <p className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">No verified facts available for this recommendation.</p>;
   return (
-    <div className="rounded-xl bg-white p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Verified Facts ({facts.length})</p>
+    <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3">
+      <p className="typo-meta text-[var(--text-muted)] mb-2">Verified Facts ({facts.length})</p>
       <div className="space-y-2">
         {facts.map((fact, i) => (
-          <div key={i} className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-xs">
+          <div key={i} className="rounded-[var(--radius-sm)] border border-emerald-500/25 bg-emerald-500/8 p-2 text-xs">
             <div className="flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="font-semibold text-slate-800">{fact.fact}</span>
-              {fact.value && <span className="text-slate-600">{fact.value}{fact.unit ? ` ${fact.unit}` : ''}</span>}
+              <span className="inline-block h-2 w-2 rounded-full bg-[var(--accent-success)]" />
+              <span className="font-semibold text-[var(--text-primary)]">{fact.fact}</span>
+              {fact.value && <span className="text-[var(--text-secondary)]">{fact.value}{fact.unit ? ` ${fact.unit}` : ''}</span>}
             </div>
-            <p className="mt-1 text-slate-500">Source: <span className="font-semibold">{fact.source.replace(/_/g, ' ')}</span></p>
-            <p className="mt-0.5 text-slate-400 break-all">Snippet: {fact.source_context_snippet.slice(0, 200)}</p>
+            <p className="mt-1 text-[var(--text-muted)]">Source: <span className="font-semibold text-[var(--text-secondary)]">{fact.source.replace(/_/g, ' ')}</span></p>
+            <p className="mt-0.5 text-[var(--text-muted)] break-all">Snippet: {fact.source_context_snippet.slice(0, 200)}</p>
             {fact.source_url && <p className="mt-0.5 text-blue-400 break-all">{fact.source_url}</p>}
           </div>
         ))}
@@ -229,9 +230,9 @@ function ValidationDisplay({ asset }: { asset: AdvancedGeoAsset }) {
 
 function CmsCopyBlock({ module, item, index }: { module: CmsCopyModule; item: RecommendationModule; index: number }) {
   return (
-    <div className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Content recommendation {index + 1}</p>
-      <p className="mt-3 font-semibold text-slate-950">{module.heading || item.title}</p>
+    <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm leading-6 text-[var(--text-secondary)]">
+      <p className="typo-meta text-[var(--text-muted)]">Content recommendation {index + 1}</p>
+      <p className="mt-3 font-semibold text-[var(--text-primary)]">{module.heading || item.title}</p>
       {/* Show intro copy only once — avoid duplicate (issue #7) */}
       {module.introCopy && module.introCopy !== module.bodyCopy ? <p className="mt-2">{module.introCopy}</p> : null}
       {module.bodyCopy ? <p className="mt-2">{module.bodyCopy}</p> : <p className="mt-2">{item.recommendation}</p>}
@@ -262,81 +263,80 @@ function PrCardBody({ item }: { item: RecommendationModule }) {
     <div className="mt-4 space-y-3">
       <div className="flex gap-1 overflow-x-auto">
         {tabList.map((tab) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold ${activeTab === tab ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'}`}>
+          <button key={tab} onClick={() => setActiveTab(tab)} className={`whitespace-nowrap rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold ${activeTab === tab ? 'bg-[var(--accent-blue)] text-white' : 'bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}>
             {tabLabels[tab]}
           </button>
         ))}
       </div>
       {activeTab === 'overview' && (
         <>
-          <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700">{item.recommendation || 'Overview content will be populated by the Bodhi PR strategy workflow node.'}</p>
-          {item.whyItMatters ? <p className="rounded-xl bg-white p-3 text-sm leading-6 text-slate-700"><span className="font-semibold text-slate-900">Why it matters:</span> {item.whyItMatters}</p> : null}
+          <p className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm leading-6 text-[var(--text-secondary)]">{item.recommendation || 'Overview content will be populated by the Bodhi PR strategy workflow node.'}</p>
+          {item.whyItMatters ? <p className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm leading-6 text-[var(--text-secondary)]"><span className="font-semibold text-[var(--text-primary)]">Why it matters:</span> {item.whyItMatters}</p> : null}
           {item.observedExternalDomains?.length ? (
-            <div className="rounded-xl bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Observed External Domains</p>
-              <div className="flex flex-wrap gap-1">{item.observedExternalDomains.slice(0, 10).map((d, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{d.domain}{d.count ? ` (${d.count})` : ''}</span>)}</div>
+            <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3">
+              <p className="typo-meta text-[var(--text-muted)] mb-2">Observed External Domains</p>
+              <div className="flex flex-wrap gap-1">{item.observedExternalDomains.slice(0, 10).map((d, i) => <span key={i} className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-xs text-[var(--text-secondary)]">{d.domain}{d.count ? ` (${d.count})` : ''}</span>)}</div>
             </div>
           ) : null}
           {item.targetSourceTypes?.length ? (
-            <div className="rounded-xl bg-white p-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Target Source Types</p>
-              <div className="flex flex-wrap gap-1">{item.targetSourceTypes.map((t, i) => <span key={i} className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">{label(t)}</span>)}</div>
+            <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3">
+              <p className="typo-meta text-[var(--text-muted)] mb-2">Target Source Types</p>
+              <div className="flex flex-wrap gap-1">{item.targetSourceTypes.map((t, i) => <span key={i} className="rounded-full bg-[var(--accent-blue-soft)] border border-[var(--accent-blue)]/20 px-2 py-1 text-xs text-[var(--accent-blue)]">{label(t)}</span>)}</div>
             </div>
           ) : null}
         </>
       )}
       {activeTab === 'asset' && pack && (
-        <div className="rounded-xl bg-white p-3 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Asset Pack Details</p>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 space-y-2">
+          <p className="typo-meta text-[var(--text-muted)]">Asset Pack Details</p>
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Asset Name</p><p className="text-sm font-semibold text-slate-800">{pack.asset_name}</p></div>
-            <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Asset Type</p><p className="text-sm font-semibold text-slate-800">{pack.asset_type.replace(/_/g, ' ')}</p></div>
+            <div className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-2"><p className="text-xs text-[var(--text-muted)]">Asset Name</p><p className="text-sm font-semibold text-[var(--text-primary)]">{pack.asset_name}</p></div>
+            <div className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-2"><p className="text-xs text-[var(--text-muted)]">Asset Type</p><p className="text-sm font-semibold text-[var(--text-primary)]">{pack.asset_type.replace(/_/g, ' ')}</p></div>
           </div>
-          <div className="rounded-lg bg-blue-50 border border-blue-200 p-2"><p className="text-xs text-blue-600 font-semibold">Information Gain Trigger</p><p className="text-sm text-slate-700">{pack.information_gain_trigger}</p></div>
-          {/* Fix truncated headline (issue #12) — use break-words */}
-          <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Suggested Headline</p><p className="text-sm font-semibold text-slate-800 break-words">{pack.suggested_headline}</p></div>
-          <div className="rounded-lg bg-slate-50 p-2"><p className="text-xs text-slate-500">Briefing Copy</p><p className="text-sm text-slate-700 break-words">{pack.briefing_copy}</p></div>
+          <div className="rounded-[var(--radius-sm)] bg-[var(--accent-blue-soft)] border border-[var(--accent-blue)]/20 p-2"><p className="text-xs text-[var(--accent-blue)] font-semibold">Information Gain Trigger</p><p className="text-sm text-[var(--text-secondary)]">{pack.information_gain_trigger}</p></div>
+          <div className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-2"><p className="text-xs text-[var(--text-muted)]">Suggested Headline</p><p className="text-sm font-semibold text-[var(--text-primary)] break-words">{pack.suggested_headline}</p></div>
+          <div className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] p-2"><p className="text-xs text-[var(--text-muted)]">Briefing Copy</p><p className="text-sm text-[var(--text-secondary)] break-words">{pack.briefing_copy}</p></div>
           {pack.unique_brand_data_required.length > 0 && (
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-2">
-              <p className="text-xs text-amber-600 font-semibold">Brand Data Required</p>
-              <ul className="mt-1 space-y-0.5">{pack.unique_brand_data_required.map((d, i) => <li key={i} className="text-xs text-slate-600">• {d.replace(/_/g, ' ')}</li>)}</ul>
+            <div className="rounded-[var(--radius-sm)] bg-amber-500/10 border border-amber-500/25 p-2">
+              <p className="text-xs text-amber-300 font-semibold">Brand Data Required</p>
+              <ul className="mt-1 space-y-0.5">{pack.unique_brand_data_required.map((d, i) => <li key={i} className="text-xs text-[var(--text-secondary)]">• {d.replace(/_/g, ' ')}</li>)}</ul>
             </div>
           )}
         </div>
       )}
       {activeTab === 'asset' && !pack && (
-        <div className="rounded-xl bg-white p-3 text-sm text-slate-500">Asset pack details will be generated by the Bodhi PR workflow node in future runs.</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">Asset pack details will be generated by the Bodhi PR workflow node in future runs.</div>
       )}
       {activeTab === 'publishers' && pack && (
-        <div className="rounded-xl bg-white p-3 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Publisher Targets</p>
-          <div className="flex flex-wrap gap-1">{pack.target_publisher_types.map((t, i) => <span key={i} className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-700">{t.replace(/_/g, ' ')}</span>)}</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 space-y-2">
+          <p className="typo-meta text-[var(--text-muted)]">Publisher Targets</p>
+          <div className="flex flex-wrap gap-1">{pack.target_publisher_types.map((t, i) => <span key={i} className="rounded-full bg-[var(--accent-blue-soft)] border border-[var(--accent-blue)]/20 px-2 py-1 text-xs text-[var(--accent-blue)]">{t.replace(/_/g, ' ')}</span>)}</div>
           {pack.target_domains_observed.length > 0 && (
-            <><p className="text-xs font-semibold text-slate-500 mt-2">Observed Domains</p>
-            <div className="flex flex-wrap gap-1">{pack.target_domains_observed.map((d, i) => <span key={i} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{d}</span>)}</div></>
+            <><p className="text-xs font-semibold text-[var(--text-muted)] mt-2">Observed Domains</p>
+            <div className="flex flex-wrap gap-1">{pack.target_domains_observed.map((d, i) => <span key={i} className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-card)] px-2 py-1 text-xs text-[var(--text-secondary)]">{d}</span>)}</div></>
           )}
         </div>
       )}
       {activeTab === 'publishers' && !pack && (
-        <div className="rounded-xl bg-white p-3 text-sm text-slate-500">Publisher target data will be generated by the Bodhi PR workflow node.</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">Publisher target data will be generated by the Bodhi PR workflow node.</div>
       )}
       {activeTab === 'triggers' && pack && (
-        <div className="rounded-xl bg-white p-3 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Semantic Triggers</p>
-          <div className="flex flex-wrap gap-1">{pack.semantic_triggers.map((t, i) => <span key={i} className="rounded-full bg-purple-100 px-2 py-1 text-xs text-purple-700">{t.replace(/_/g, ' ')}</span>)}</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 space-y-2">
+          <p className="typo-meta text-[var(--text-muted)]">Semantic Triggers</p>
+          <div className="flex flex-wrap gap-1">{pack.semantic_triggers.map((t, i) => <span key={i} className="rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-1 text-xs text-purple-400">{t.replace(/_/g, ' ')}</span>)}</div>
         </div>
       )}
       {activeTab === 'triggers' && !pack && (
-        <div className="rounded-xl bg-white p-3 text-sm text-slate-500">Semantic trigger data will be generated by the Bodhi PR workflow node.</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">Semantic trigger data will be generated by the Bodhi PR workflow node.</div>
       )}
       {activeTab === 'requirements' && pack && (
-        <div className="rounded-xl bg-white p-3 space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Publisher Format Requirements</p>
-          <ul className="space-y-1">{pack.publisher_format_requirements.map((r, i) => <li key={i} className="text-xs text-slate-600">• {r.replace(/_/g, ' ')}</li>)}</ul>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 space-y-2">
+          <p className="typo-meta text-[var(--text-muted)]">Publisher Format Requirements</p>
+          <ul className="space-y-1">{pack.publisher_format_requirements.map((r, i) => <li key={i} className="text-xs text-[var(--text-secondary)]">• {r.replace(/_/g, ' ')}</li>)}</ul>
         </div>
       )}
       {activeTab === 'requirements' && !pack && (
-        <div className="rounded-xl bg-white p-3 text-sm text-slate-500">Publisher format requirements will be generated by the Bodhi PR workflow node.</div>
+        <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm text-[var(--text-muted)]">Publisher format requirements will be generated by the Bodhi PR workflow node.</div>
       )}
     </div>
   );
@@ -394,18 +394,18 @@ function ActionRow({ item }: { item: ActionItem }) {
   const isUrl = /^https?:\/\//i.test(target);
   const action = item.action.replace(target, '').replace(/:\s*$/, '').trim() || item.action;
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4 hover:bg-[var(--bg-card-hover)] transition-colors">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={tone(item.priority)}>{item.priority}</Badge>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">Effort {item.effort}</span>
-            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.status}</span>
-            {(item.workstream || item.source) && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">{item.workstream || item.source}</span>}
+            <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1 text-xs font-semibold text-[var(--text-secondary)]">Effort {item.effort}</span>
+            <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1 text-xs font-semibold text-[var(--text-secondary)]">{item.status}</span>
+            {(item.workstream || item.source) && <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-panel)] px-2 py-1 text-xs font-semibold text-[var(--text-secondary)]">{item.workstream || item.source}</span>}
           </div>
-          <h3 className="mt-3 text-base font-semibold leading-6 text-slate-950">{action}</h3>
-          <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Target</p>
+          <h3 className="mt-3 text-base font-semibold leading-6 text-[var(--text-primary)]">{action}</h3>
+          <div className="mt-3 rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3 text-sm leading-6 text-[var(--text-secondary)]">
+            <p className="typo-meta text-[var(--text-muted)]">Target</p>
             <p className={`${isUrl ? 'break-all font-mono text-xs' : 'break-words'}`}>{target}</p>
           </div>
         </div>
@@ -420,5 +420,5 @@ function ActionRow({ item }: { item: ActionItem }) {
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 font-semibold text-slate-800">{value}</p></div>;
+  return <div className="rounded-[var(--radius-sm)] bg-[var(--bg-panel)] p-3"><p className="typo-meta text-[var(--text-muted)]">{label}</p><p className="mt-1 font-semibold text-[var(--text-primary)]">{value}</p></div>;
 }

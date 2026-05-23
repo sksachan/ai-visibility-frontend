@@ -7,11 +7,14 @@
   --bg-panel: #131313;
   --bg-card: #171717;
   --bg-card-hover: #1b1b1b;
+
   --border-subtle: #232323;
   --border-strong: #2c2c2c;
+
   --text-primary: #edf2f5;
   --text-secondary: #9f9f9f;
-  --text-muted: #656b76;
+  --text-muted: #505050;
+
   --accent-success: #00c758;
   --accent-success-soft: rgba(8, 255, 182, 0.12);
   --accent-blue: #54a2ff;
@@ -19,7 +22,11 @@
   --accent-purple: #935dff;
   --accent-warning: #ffea35;
   --accent-danger: #ff6568;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
   --shadow-panel: 0 24px 80px rgba(0, 0, 0, 0.45);
+
   color: var(--text-primary);
   background: var(--bg-app);
   font-synthesis: none;
@@ -28,85 +35,76 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-body { margin: 0; overflow-x: hidden; background: var(--bg-app); }
-
-@media print {
-  .no-print { display: none !important; }
-  body { background: white; }
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ── Print ───────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; color: #111; }
+}
+
+/* ── Scrollbar ───────────────────────────────────────── */
 .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 
-.slingshot-theme {
-  background:
-    linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px) 0 0 / 72px 72px,
-    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px) 0 0 / 72px 72px,
-    radial-gradient(circle at 50% -15%, rgba(84, 162, 255, 0.14), transparent 34%),
-    var(--bg-app);
-  color: var(--text-primary);
-}
-
+/* ── Audit canvas (dotted grid) ──────────────────────── */
 .audit-canvas {
   background-color: #000;
-  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px);
   background-size: 16px 16px;
 }
 
-.slingshot-theme .bg-white,
-.slingshot-theme .bg-white\/90,
-.slingshot-theme .bg-white\/95 {
-  background-color: var(--bg-panel) !important;
+/* ── Typography scale ────────────────────────────────── */
+.typo-page   { font-size: 28px; font-weight: 500; line-height: 1.2; letter-spacing: -0.01em; }
+.typo-section { font-size: 17px; font-weight: 500; line-height: 1.35; }
+.typo-body   { font-size: 14px; font-weight: 400; line-height: 1.6; }
+.typo-meta   { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; }
+
+@media (min-width: 768px) {
+  .typo-page { font-size: 32px; }
+  .typo-section { font-size: 18px; }
 }
 
-.slingshot-theme .bg-slate-50,
-.slingshot-theme .bg-slate-100,
-.slingshot-theme .bg-slate-900 {
-  background-color: var(--bg-card) !important;
+/* ── Global dark overrides for Tailwind light classes ── */
+input, select, textarea {
+  background: var(--bg-card) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-sm);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted) !important;
 }
 
-.slingshot-theme .text-slate-950,
-.slingshot-theme .text-slate-900,
-.slingshot-theme .text-slate-800,
-.slingshot-theme .text-slate-700 {
+button {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+/* ── Recharts dark overrides ─────────────────────────── */
+.recharts-cartesian-grid line { stroke: var(--border-subtle); }
+.recharts-text { fill: var(--text-secondary) !important; }
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--bg-panel) !important;
+  border-color: var(--border-subtle) !important;
   color: var(--text-primary) !important;
 }
 
-.slingshot-theme .text-slate-600,
-.slingshot-theme .text-slate-500,
-.slingshot-theme .text-slate-400 {
-  color: var(--text-secondary) !important;
-}
+/* ── Status pill colours ─────────────────────────────── */
+.status-owned-target   { background: var(--accent-success-soft); color: var(--accent-success); border: 1px solid rgba(0,199,88,0.25); }
+.status-owned-eco      { background: var(--accent-blue-soft); color: var(--accent-blue); border: 1px solid rgba(84,162,255,0.25); }
+.status-external       { background: rgba(255,234,53,0.10); color: #c9b800; border: 1px solid rgba(255,234,53,0.18); }
+.status-competitor     { background: rgba(255,101,104,0.10); color: var(--accent-danger); border: 1px solid rgba(255,101,104,0.20); }
+.status-not-observed   { background: rgba(80,80,80,0.12); color: var(--text-muted); border: 1px solid rgba(80,80,80,0.20); }
 
-.slingshot-theme .border-slate-100,
-.slingshot-theme .border-slate-200,
-.slingshot-theme .border-slate-300 {
-  border-color: var(--border-subtle) !important;
-}
-
-.slingshot-theme .shadow-sm,
-.slingshot-theme .shadow,
-.slingshot-theme .shadow-lg {
-  box-shadow: var(--shadow-panel) !important;
-}
-
-.slingshot-theme input,
-.slingshot-theme select,
-.slingshot-theme textarea {
-  background: #0b0b0b;
-  border-color: var(--border-subtle);
-  color: var(--text-primary);
-}
-
-.slingshot-theme input::placeholder,
-.slingshot-theme textarea::placeholder {
-  color: var(--text-muted);
-}
-
-.slingshot-theme button {
-  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
-}
-
-.slingshot-theme button:hover {
-  border-color: var(--border-strong);
-}
+/* ── Table dark ──────────────────────────────────────── */
+table { border-collapse: collapse; }
+thead th { color: var(--text-muted); }
+tbody tr { border-bottom: 1px solid var(--border-subtle); }
+tbody tr:hover { background: var(--bg-card-hover); }
+td, th { padding: 10px 12px; }

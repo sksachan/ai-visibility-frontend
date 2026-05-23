@@ -7,17 +7,17 @@ function scoreLabel(score: number | null): string {
 }
 
 function scoreTone(score: number | null): string {
-  if (score === null || !Number.isFinite(score)) return 'bg-slate-100 text-slate-600';
-  if (score >= 70) return 'bg-emerald-50 text-emerald-700';
-  if (score >= 45) return 'bg-amber-50 text-amber-700';
-  return 'bg-rose-50 text-rose-700';
+  if (score === null || !Number.isFinite(score)) return 'bg-white/5 text-[var(--text-muted)] ring-1 ring-white/10';
+  if (score >= 70) return 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20';
+  if (score >= 45) return 'bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/20';
+  return 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20';
 }
 
 function directionTone(value: string): string {
-  const text = value.toLowerCase();
-  if (text.includes('+') || text.includes('improv') || text.includes('up')) return 'bg-emerald-50 text-emerald-700';
-  if (text.includes('-') || text.includes('down') || text.includes('declin')) return 'bg-rose-50 text-rose-700';
-  return 'bg-slate-100 text-slate-600';
+  const t = value.toLowerCase();
+  if (t.includes('+') || t.includes('improv') || t.includes('up')) return 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20';
+  if (t.includes('-') || t.includes('down') || t.includes('declin')) return 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20';
+  return 'bg-white/5 text-[var(--text-muted)] ring-1 ring-white/10';
 }
 
 export function BrandTopicScorecard({ rows }: { rows: BrandTopicScorecardRow[] }) {
@@ -27,24 +27,24 @@ export function BrandTopicScorecard({ rows }: { rows: BrandTopicScorecardRow[] }
       <SectionTitle eyebrow="Executive topic scorecard" title="AI visibility by brand topic">
         CMO-ready view of where the brand is visible, under-represented or awaiting fresh citation evidence.
       </SectionTitle>
-      <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+      <div className="mt-4 overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-subtle)]">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-left">
-            <thead className="bg-slate-50">
+          <table className="min-w-full text-left">
+            <thead>
               <tr>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Brand topic</th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">AI visibility score</th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Relative position vs. key competitor</th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Direction vs. last period</th>
-                <th className="px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Comment</th>
+                <th className="px-4 py-3 typo-meta text-[var(--text-muted)]">Brand topic</th>
+                <th className="px-4 py-3 typo-meta text-[var(--text-muted)]">AI visibility score</th>
+                <th className="px-4 py-3 typo-meta text-[var(--text-muted)]">Relative position vs. key competitor</th>
+                <th className="px-4 py-3 typo-meta text-[var(--text-muted)]">Direction vs. last period</th>
+                <th className="px-4 py-3 typo-meta text-[var(--text-muted)]">Comment</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody>
               {rows.map((row) => (
                 <tr key={row.topic} className="align-top">
-                  <td className="max-w-xs px-4 py-4 text-sm font-semibold text-slate-950">
+                  <td className="max-w-xs px-4 py-4 text-sm font-semibold text-[var(--text-primary)]">
                     {row.topic}
-                    <div className="mt-1 text-xs font-normal text-slate-500">
+                    <div className="mt-1 text-xs font-normal text-[var(--text-muted)]">
                       {row.queryCount ? `${row.queryCount} queries` : 'Query count pending'}
                       {row.ownedUrlCount ? ` · ${row.ownedUrlCount} owned URLs` : ''}
                     </div>
@@ -52,11 +52,11 @@ export function BrandTopicScorecard({ rows }: { rows: BrandTopicScorecardRow[] }
                   <td className="px-4 py-4">
                     <span className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${scoreTone(row.aiVisibilityScore)}`}>{scoreLabel(row.aiVisibilityScore)}</span>
                   </td>
-                  <td className="max-w-sm px-4 py-4 text-sm leading-6 text-slate-700">{row.relativePosition}</td>
+                  <td className="max-w-sm px-4 py-4 text-sm leading-6 text-[var(--text-secondary)]">{row.relativePosition}</td>
                   <td className="px-4 py-4">
                     <span className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${directionTone(row.directionVsLastPeriod)}`}>{row.directionVsLastPeriod}</span>
                   </td>
-                  <td className="max-w-md px-4 py-4 text-sm leading-6 text-slate-700">{row.comment}</td>
+                  <td className="max-w-md px-4 py-4 text-sm leading-6 text-[var(--text-secondary)]">{row.comment}</td>
                 </tr>
               ))}
             </tbody>
