@@ -1,10 +1,23 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend } from 'recharts';
 import type { OwnedPage, ReportBundle } from '../types/report';
 import { WorkspacePanel, SectionHeader, DarkButton } from './ui';
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean))).sort();
-type SortKey = keyof Pick<OwnedPage, 'url' | 'journeyCategory' | 'geoScore' | 'clarity' | 'semanticDepth' | 'structure' | 'evidence' | 'freshness' | 'faqReadiness'> | 'relatedQueries';
+type SortKey = keyof Pick<OwnedPage, 'url' | 'geoScore' | 'clarity' | 'semanticDepth' | 'structure' | 'evidence' | 'freshness' | 'faqReadiness'> | 'relatedQueries';
 type SortState = { key: SortKey; direction: 'asc' | 'desc' };
+type GraphMode = 'waterfall' | 'comparison';
+
+const dimensionLabels: Record<string, string> = {
+  clarity: 'Content Clarity',
+  semanticDepth: 'Semantic Depth',
+  structure: 'Structured Data',
+  evidence: 'E-E-A-T Signals',
+  freshness: 'Freshness Index',
+  faqReadiness: 'FAQ Readiness',
+};
+const dimensionKeys = ['clarity', 'semanticDepth', 'structure', 'evidence', 'freshness', 'faqReadiness'] as const;
+const dimPalette = ['#54a2ff', '#935dff', '#00c758', '#ffea35', '#ff6568', '#9f9f9f'];
 
 export function QueryDiagnostics() {
   return <WorkspacePanel><SectionHeader eyebrow="Query diagnostics" title="Query diagnostics have moved into Query workbench">Open the Query workbench tab for query-level AI visibility, competitors, winning source types and leading citation domains.</SectionHeader></WorkspacePanel>;
@@ -14,7 +27,11 @@ export function OwnedUrlReadiness({ report, onOpenCms }: { report: ReportBundle;
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState('All scored owned URLs');
   const [sort, setSort] = useState<SortState>({ key: 'geoScore', direction: 'asc' });
+  const [graphMode, setGraphMode] = useState<GraphMode>('waterfall');
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 5;
   const cmsUrls = useMemo(() => new Set(report.cmsModules.map((item) => normaliseUrl(item.targetUrl)).filter(Boolean)), [report.cmsModules]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     const rows = report.ownedPages.filter((page) => {
@@ -33,27 +50,159 @@ export function OwnedUrlReadiness({ report, onOpenCms }: { report: ReportBundle;
     });
   }, [report.ownedPages, cmsUrls, search, scope, sort]);
 
+  // Waterfall chart data: average of 6 dimensions across all pages
+  const waterfallData = useMemo(() => {
+    const pages = filtered.length ? filtered : report.ownedPages;
+    if (!pages.length) return [];
+    return dimensionKeys.map((key, i) => {
+      const values = pages.map((p) => Number(p[key]) || 0);
+      const avg = values.reduce((a, b) => a + b, 0) / values.length;
+      return {
+        dimension: dimensionLabels[key],
+        average: Math.round(avg * 10) / 10,
+        max: 20,
+        fill: dimPalette[i],
+      };
+    });
+  }, [filtered, report.ownedPages]);
+
+  // Comparison chart data: by brand topic (journey category)
+  const comparisonData = useMemo(() => {
+    const pages = filtered.length ? filtered : report.ownedPages;
+    const topicMap: Record<string, { count: number; dims: Record<string, number> }> = {};
+    pages.forEach((p) => {
+      const topics = new Set<string>();
+      p.relatedQueries.forEach((q) => {
+        const vis = q.visibilityStatus || '';
+        // Try to get topic from journey category or just use a generic label
+        topics.add(p.journeyCategory || 'Unclassified');
+      });
+      if (!topics.size) topics.add(p.journeyCategory || 'Unclassified');
+      topics.forEach((topic) => {
+        if (!topicMap[topic]) topicMap[topic] = { count: 0, dims: {} };
+        topicMap[topic].count++;
+        dimensionKeys.forEach((k) => {
+          topicMap[topic].dims[k] = (topicMap[topic].dims[k] || 0) + (Number(p[k]) || 0);
+        });
+      });
+    });
+    return Object.entries(topicMap)
+      .filter(([t]) => t && t !== 'Unclassified')
+      .slice(0, 8)
+      .map(([topic, data]) => {
+        const row: Record<string, unknown> = { topic };
+        dimensionKeys.forEach((k) => {
+          row[k] = Math.round((data.dims[k] / data.count) * 10) / 10;
+        });
+        return row;
+      });
+  }, [filtered, report.ownedPages]);
+
   function toggle(key: SortKey) {
     setSort((current) => current.key === key ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+    setTablePage(0);
   }
+
+  const totalPages = Math.ceil(filtered.length / TABLE_PAGE_SIZE);
+  const pagedRows = filtered.slice(tablePage * TABLE_PAGE_SIZE, (tablePage + 1) * TABLE_PAGE_SIZE);
+
+  // Compute overall GEO score from waterfall
+  const overallGeo = useMemo(() => {
+    const total = waterfallData.reduce((a, d) => a + d.average, 0);
+    return Math.round(total * 10) / 10;
+  }, [waterfallData]);
 
   return (
     <WorkspacePanel>
       <SectionHeader eyebrow="Owned URL GEO readiness" title={`Owned-page readiness records (${filtered.length}/${report.ownedPages.length})`}>
         Site-level readiness includes inventory URLs selected from sitemap/robots plus query-mapped CMS pages.
       </SectionHeader>
+
+      {/* Graph section */}
+      <div className="mb-5">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <DarkButton variant={graphMode === 'waterfall' ? 'primary' : 'default'} onClick={() => setGraphMode('waterfall')}>Dimension contributions to GEO Score</DarkButton>
+          <DarkButton variant={graphMode === 'comparison' ? 'primary' : 'default'} onClick={() => setGraphMode('comparison')}>Compare by brand topics</DarkButton>
+        </div>
+
+        {graphMode === 'waterfall' && (
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
+            <p className="mb-3 text-sm text-[var(--text-secondary)]">
+              Average contribution of 6 GEO dimensions across {filtered.length || report.ownedPages.length} audited pages. Overall GEO Score: <span className="font-semibold text-[var(--text-primary)]">{overallGeo}/120</span>
+            </p>
+            <div className="h-72">
+              {waterfallData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={waterfallData} margin={{ top: 10, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
+                    <XAxis dataKey="dimension" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                    <YAxis domain={[0, 20]} label={{ value: 'Avg score /20', angle: -90, position: 'insideLeft', fill: 'var(--text-muted)' }} tick={{ fill: 'var(--text-secondary)' }} />
+                    <Tooltip content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return <div className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-3 text-sm shadow-lg"><p className="font-semibold text-[var(--text-primary)]">{d.dimension}</p><p className="text-[var(--text-secondary)]">{d.average} / 20</p></div>;
+                    }} />
+                    <Bar dataKey="average" radius={[4, 4, 0, 0]}>
+                      {waterfallData.map((d, i) => <Cell key={d.dimension} fill={dimPalette[i % dimPalette.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-[var(--text-muted)]">No owned page data available.</p>}
+            </div>
+          </div>
+        )}
+
+        {graphMode === 'comparison' && (
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-card)] p-4">
+            <p className="mb-3 text-sm text-[var(--text-secondary)]">
+              GEO readiness by 6 dimensions for each brand topic. Compare dimension strengths across topics.
+            </p>
+            <div className="h-96">
+              {comparisonData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={dimensionKeys.map((k) => {
+                    const row: Record<string, unknown> = { dimension: dimensionLabels[k] };
+                    comparisonData.forEach((topic) => { row[topic.topic as string] = topic[k]; });
+                    return row;
+                  })}>
+                    <PolarGrid stroke="var(--border-subtle)" />
+                    <PolarAngleAxis dataKey="dimension" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                    <PolarRadiusAxis domain={[0, 20]} tick={{ fill: 'var(--text-muted)', fontSize: 10 }} />
+                    {comparisonData.slice(0, 6).map((topic, i) => (
+                      <Radar key={topic.topic as string} name={topic.topic as string} dataKey={topic.topic as string} stroke={dimPalette[i % dimPalette.length]} fill={dimPalette[i % dimPalette.length]} fillOpacity={0.15} />
+                    ))}
+                    <Legend wrapperStyle={{ fontSize: 11, color: 'var(--text-secondary)' }} />
+                    <Tooltip />
+                  </RadarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-sm text-[var(--text-muted)]">No topic data available for comparison. Pages need journey categories or related queries.</p>}
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="mb-5 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        <input className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]" placeholder="Search URL, title, query, gap…" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <select className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]" value={scope} onChange={(event) => setScope(event.target.value)}>
+        <input className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]" placeholder="Search URL, title, query, gap\u2026" value={search} onChange={(event) => { setSearch(event.target.value); setTablePage(0); }} />
+        <select className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-card)] px-3 py-2 text-sm text-[var(--text-primary)]" value={scope} onChange={(event) => { setScope(event.target.value); setTablePage(0); }}>
           <option>All scored owned URLs</option>
           <option>Mapped/CMS URLs</option>
           <option>Inventory only</option>
         </select>
       </div>
-      <OwnedTable pages={filtered} cmsUrls={cmsUrls} sort={sort} onSort={toggle} onOpenCms={onOpenCms} />
-      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {filtered.slice(0, 12).map((page) => <OwnedPageCard key={`${page.url}-diag`} page={page} />)}
-      </div>
+      <OwnedTable pages={pagedRows} cmsUrls={cmsUrls} sort={sort} onSort={toggle} onOpenCms={onOpenCms} />
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-xs text-[var(--text-muted)]">
+            Showing {tablePage * TABLE_PAGE_SIZE + 1}\u2013{Math.min((tablePage + 1) * TABLE_PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <DarkButton onClick={() => setTablePage((p) => Math.max(0, p - 1))} disabled={tablePage === 0}>Previous</DarkButton>
+            <span className="text-xs text-[var(--text-secondary)]">{tablePage + 1} / {totalPages}</span>
+            <DarkButton onClick={() => setTablePage((p) => Math.min(totalPages - 1, p + 1))} disabled={tablePage >= totalPages - 1}>Next</DarkButton>
+          </div>
+        </div>
+      )}
     </WorkspacePanel>
   );
 }
@@ -63,7 +212,7 @@ function normaliseUrl(value: string | undefined) {
 }
 
 function SortHeader({ label, sortKey, sort, onSort }: { label: string; sortKey: SortKey; sort: SortState; onSort: (key: SortKey) => void }) {
-  const arrow = sort.key === sortKey ? (sort.direction === 'asc' ? '↑' : '↓') : '⇕';
+  const arrow = sort.key === sortKey ? (sort.direction === 'asc' ? '\u2191' : '\u2193') : '\u21D5';
   return <button type="button" className="inline-flex items-center gap-1 font-semibold text-[var(--text-muted)]" onClick={() => onSort(sortKey)}>{label} <span>{arrow}</span></button>;
 }
 
@@ -89,7 +238,7 @@ function OwnedTable({ pages, cmsUrls, sort, onSort, onOpenCms }: { pages: OwnedP
         <tbody>
           {pages.map((page) => (
             <tr key={page.url} className="align-top">
-              <td className="max-w-sm px-3 py-4 font-medium text-[var(--text-primary)]"><p className="break-all">{page.url}</p>{page.title && <p className="mt-1 text-xs text-[var(--text-muted)]">{page.title}</p>}<p className="mt-1 typo-meta text-[var(--text-muted)]">{page.queryMapped || cmsUrls.has(normaliseUrl(page.url)) ? 'Mapped/CMS' : 'Inventory only'} · {page.inventorySource || 'sitemap_inventory'}</p></td>
+              <td className="max-w-sm px-3 py-4 font-medium text-[var(--text-primary)]"><p className="break-all">{page.url}</p>{page.title && <p className="mt-1 text-xs text-[var(--text-muted)]">{page.title}</p>}<p className="mt-1 typo-meta text-[var(--text-muted)]">{page.queryMapped || cmsUrls.has(normaliseUrl(page.url)) ? 'Mapped/CMS' : 'Inventory only'} \u00b7 {page.inventorySource || 'sitemap_inventory'}</p></td>
               <td className="px-3 py-4"><p className="font-semibold text-[var(--text-primary)]">{page.geoScore}</p><ScoreMethod page={page} /></td>
               <td className="px-3 py-4 text-[var(--text-secondary)]">{page.clarity}</td>
               <td className="px-3 py-4 text-[var(--text-secondary)]">{page.semanticDepth}</td>
@@ -124,36 +273,15 @@ function ScoreMethod({ page }: { page: OwnedPage }) {
   return <span title={page.scoringNotes || undefined} className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tone}`}>{lbl}</span>;
 }
 
-function OwnedPageCard({ page }: { page: OwnedPage }) {
-  return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-card)] p-3 hover:bg-[var(--bg-card-hover)] transition-colors">
-      <p className="break-all text-sm font-semibold text-[var(--text-primary)]">{page.url}</p>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">{page.scoreBand || 'unbanded'} · {page.evidenceMatchStatus}{page.scoringMethod ? ` · ${scoreMethodLabel(page.scoringMethod)}` : ''}</p>
-      {page.scoringNotes ? <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{page.scoringNotes}</p> : null}
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">
-        {page.diagnostics.map((diag) => <li key={diag}>{diag}</li>)}
-      </ul>
-      {page.relatedQueries.length ? (
-        <details className="mt-2 text-sm text-[var(--text-secondary)]">
-          <summary className="cursor-pointer font-semibold text-[var(--text-primary)]">Mapped queries</summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            {page.relatedQueries.slice(0, 5).map((query) => <li key={query.id}>{query.id}: {query.query}</li>)}
-          </ul>
-        </details>
-      ) : null}
-    </div>
-  );
-}
-
 function TechnicalSignals({ page }: { page: OwnedPage }) {
   const tech = page.technicalSignals || {};
   const schemaTypes = tech.schemaTypes || [];
   const jsonLdQuality = tech.jsonLdPresent === undefined
     ? 'Not checked'
     : tech.jsonLdPresent
-      ? (schemaTypes.length >= 2 ? 'Present · good' : 'Present · partial')
+      ? (schemaTypes.length >= 2 ? 'Present \u00b7 good' : 'Present \u00b7 partial')
       : 'Missing';
-  const tone = jsonLdQuality.startsWith('Present · good') ? 'status-owned-target'
+  const tone = jsonLdQuality.startsWith('Present \u00b7 good') ? 'status-owned-target'
     : jsonLdQuality.startsWith('Present') ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
     : jsonLdQuality.startsWith('Not checked') ? 'border-[var(--border-subtle)] bg-[var(--bg-panel)] text-[var(--text-muted)]'
     : 'border-red-500/30 bg-red-500/10 text-red-400';
@@ -166,8 +294,8 @@ function TechnicalSignals({ page }: { page: OwnedPage }) {
   return (
     <div className="min-w-[180px] space-y-1">
       <span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold ${tone}`}>JSON-LD: {jsonLdQuality}</span>
-      {schemaTypes.length ? <p className="text-[11px] leading-4 text-[var(--text-muted)]">Schema: {schemaTypes.slice(0, 3).join(', ')}{schemaTypes.length > 3 ? '…' : ''}</p> : null}
-      {supporting.length ? <p className="text-[11px] leading-4 text-[var(--text-muted)]">{supporting.join(' · ')}</p> : null}
+      {schemaTypes.length ? <p className="text-[11px] leading-4 text-[var(--text-muted)]">Schema: {schemaTypes.slice(0, 3).join(', ')}{schemaTypes.length > 3 ? '\u2026' : ''}</p> : null}
+      {supporting.length ? <p className="text-[11px] leading-4 text-[var(--text-muted)]">{supporting.join(' \u00b7 ')}</p> : null}
     </div>
   );
 }

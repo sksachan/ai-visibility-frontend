@@ -53,6 +53,16 @@ body {
 .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 
+/* Dark scrollbar for workspace areas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1e1e1e #0d0d0d;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: #0d0d0d; }
+*::-webkit-scrollbar-thumb { background: #1e1e1e; border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: #2a2a2a; }
+
 /* ── Audit canvas (dotted grid) ──────────────────────── */
 .audit-canvas {
   background-color: #000;

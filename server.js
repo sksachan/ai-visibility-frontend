@@ -419,6 +419,16 @@ app.get('/api/evidence/reports/:runId', async (req, res) => {
   } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error), evidenceServiceUrl: base }); }
 });
 
+app.delete('/api/evidence/reports/:runId', async (req, res) => {
+  const base = evidenceBase();
+  if (!base) { res.status(503).json({ error: 'EVIDENCE_SERVICE_URL is not configured on the frontend Railway service.' }); return; }
+  try {
+    const response = await fetch(`${base}/reports/${encodeURIComponent(req.params.runId)}`, { method: 'DELETE', headers: { Accept: 'application/json' } });
+    const text = await response.text();
+    res.status(response.status).type(response.headers.get('content-type') || 'application/json').send(text);
+  } catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : String(error), evidenceServiceUrl: base }); }
+});
+
 app.post('/api/evidence/refresh', async (req, res) => {
   const base = evidenceBase();
   if (!base) {

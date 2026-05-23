@@ -292,25 +292,17 @@ export default function App() {
             <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-3">
               <p className="typo-meta text-[var(--text-muted)] mb-2">Run Status</p>
               <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${refreshStatus?.active ? 'bg-[var(--accent-blue)] animate-pulse' : 'bg-[var(--accent-success)]'}`} />
-                <span className="text-xs font-medium text-[var(--text-secondary)]">
-                  {refreshStatus?.active ? 'Refresh running' : 'Idle'}
+                <span className={`h-2 w-2 rounded-full ${refreshStatus?.active ? 'bg-[var(--accent-blue)] animate-pulse' : refreshStatus?.stage && ['failed', 'error'].includes(refreshStatus.stage.toLowerCase()) ? 'bg-[var(--accent-danger)]' : 'bg-[var(--accent-success)]'}`} />
+                <span className={`text-xs font-medium ${refreshStatus?.active ? 'text-[var(--accent-blue)]' : refreshStatus?.stage && ['failed', 'error'].includes(refreshStatus.stage.toLowerCase()) ? 'text-[var(--accent-danger)]' : 'text-[var(--accent-success)]'}`}>
+                  {refreshStatus?.active ? 'Analysis running' : refreshStatus?.stage && ['failed', 'error'].includes(refreshStatus.stage.toLowerCase()) ? 'Failed' : refreshStatus?.stage === 'report_bundle_ready' ? 'Complete' : 'Idle'}
                 </span>
               </div>
               {refreshStatus?.stage && (
-                <p className="mt-2 text-[11px] text-[var(--text-muted)]">{niceStage(refreshStatus.stage)}</p>
+                <p className="mt-2 text-[11px] text-[var(--text-secondary)]">{niceStage(refreshStatus.stage)}</p>
               )}
               {refreshStatus?.runId && (
                 <p className="mt-1 text-[10px] font-mono text-[var(--text-muted)] break-all">{refreshStatus.runId}</p>
               )}
-            </div>
-
-            {/* Bodhi workflow state */}
-            <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-3">
-              <p className="typo-meta text-[var(--text-muted)] mb-2">Workflow State</p>
-              <p className="text-xs text-[var(--text-secondary)]">
-                {refreshStatus?.active && refreshStatus?.stage ? niceStage(refreshStatus.stage) : refreshStatus?.stage ? niceStage(refreshStatus.stage) : 'No active workflow'}
-              </p>
               {refreshStatus?.latestSuccessfulRunId && (
                 <p className="mt-2 text-[10px] text-[var(--text-muted)]">Last success: <span className="font-mono">{refreshStatus.latestSuccessfulRunId}</span></p>
               )}

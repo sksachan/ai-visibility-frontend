@@ -1,12 +1,7 @@
-/**
- * Frontend API layer — all calls go through the Express proxy in server.js.
- * This file MUST exist at src/lib/api.ts for the frontend to build.
- */
 import { normaliseReport } from './normaliseReport';
 import type { ReportBundle } from '../types/report';
 
-/* ── Shared types ────────────────────────────────────────────── */
-
+/* ── Types ─────────────────────────────────────────────── */
 export interface RunStatusSummary {
   active: boolean;
   stage?: string;
@@ -22,7 +17,6 @@ export interface ReportHistoryRun {
   run_id: string;
   brand?: string;
   market?: string;
-  domain?: string;
   query_count?: number;
   citation_count?: number;
   owned_pages_scoreable?: number;
@@ -33,7 +27,6 @@ export interface ReportHistoryRun {
   source_run_id?: string;
   completed_at_epoch?: number;
   created_at_epoch?: number;
-  status?: string;
 }
 
 export interface BrandConfig {
@@ -55,12 +48,7 @@ export interface BrandConfig {
 export interface PortfolioValidationResult {
   status: string;
   errors?: string[];
-  validation?: {
-    valid: boolean;
-    errors?: string[];
-    warnings?: string[];
-    stats?: { query_count?: number; topic_count?: number };
-  };
+  validation?: { valid: boolean; errors?: string[]; warnings?: string[]; stats?: { query_count?: number; topic_count?: number } };
 }
 
 export interface RefreshEvidencePayload {
@@ -96,106 +84,93 @@ export interface RefreshResult {
   evidenceRunId?: string;
   runId?: string;
   jobId?: string;
-  [key: string]: unknown;
 }
 
-/* ── Helpers ─────────────────────────────────────────────────── */
-
-async function jsonFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
+/* ── Helpers ───────────────────────────────────────────── */
+async function fetchJson(url: string, init?: RequestInit) {
   const res = await fetch(url, { ...init, headers: { Accept: 'application/json', ...(init?.headers || {}) } });
-  const text = await res.text();
-  let body: unknown;
-  try { body = JSON.parse(text); } catch { body = text; }
   if (!res.ok) {
-    const msg = typeof body === 'object' && body && 'error' in body ? String((body as Record<string, unknown>).error) : `${res.status} ${res.statusText}`;
-    throw new Error(msg);
+    const text = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ''}`);
   }
-  return body as T;
+  return res.json();
 }
 
-function normaliseStatus(raw: Record<string, unknown>): RunStatusSummary {
-  const stage = String(raw.stage || raw.current_stage || raw.status || '').trim().toLowerCase() || undefined;
-  const active = Boolean(
-    raw.active ?? raw.is_active ??
-    (stage && !['completed', 'success', 'successful', 'succeeded', 'report_bundle_ready', 'failed', 'error', 'cancelled', 'canceled', 'idle', ''].includes(stage))
-  );
+/* ── Report loading ────────────────────────────────────── */
+export async function fetchLatestReport(brand: string, market: string): Promise<ReportBundle> {
+  const params = new URLSearchParams({ brand, market }).toString();
+  const json = await fetchJson(`/api/bodhi/latest?${params}`);
+  return normaliseReport(json);
+}
+
+/* ── Refresh status ────────────────────────────────────── */
+export async function fetchRefreshStatus(brand: string, market: string, runId?: string): Promise<RunStatusSummary> {
+  const params = new URLSearchParams({ brand, market });
+  if (runId) params.set('runId', runId);
+  const json = await fetchJson(`/api/evidence/status?${params.toString()}`);
+  const raw = json && typeof json === 'object' ? json : {};
   return {
-    active,
-    stage,
-    status: stage,
-    runId: String(raw.run_id || raw.runId || raw.target_run_id || raw.evidence_run_id || '').trim() || undefined,
-    targetRunId: String(raw.target_run_id || raw.run_id || '').trim() || undefined,
-    jobId: String(raw.job_id || raw.jobId || '').trim() || undefined,
-    latestSuccessfulRunId: String(raw.latest_successful_run_id || raw.latestSuccessfulRunId || '').trim() || undefined,
+    active: Boolean(raw.active ?? raw.is_active ?? (raw.stage && !['completed', 'success', 'successful', 'succeeded', 'report_bundle_ready', 'failed', 'error'].includes(String(raw.stage || raw.status || '').toLowerCase()))),
+    stage: String(raw.stage || raw.current_stage || raw.status || ''),
+    status: String(raw.status || raw.stage || ''),
+    runId: String(raw.run_id || raw.target_run_id || raw.evidence_run_id || ''),
+    targetRunId: String(raw.target_run_id || raw.run_id || ''),
+    jobId: String(raw.job_id || ''),
+    latestSuccessfulRunId: String(raw.latest_successful_run_id || raw.latest_successful || ''),
     raw,
   };
 }
 
-/* ── Report loading ──────────────────────────────────────────── */
-
-export async function fetchLatestReport(brand: string, market: string): Promise<ReportBundle> {
-  const params = new URLSearchParams({ brand, market }).toString();
-  const payload = await jsonFetch<Record<string, unknown>>(`/api/bodhi/latest?${params}`);
-  return normaliseReport(payload);
-}
-
-/* ── Refresh status ──────────────────────────────────────────── */
-
-export async function fetchRefreshStatus(brand: string, market: string, runId?: string): Promise<RunStatusSummary> {
-  const params = new URLSearchParams({ brand, market });
-  if (runId) params.set('runId', runId);
-  try {
-    const raw = await jsonFetch<Record<string, unknown>>(`/api/evidence/status?${params.toString()}`);
-    return normaliseStatus(raw);
-  } catch {
-    return { active: false, raw: {} };
-  }
-}
-
-/* ── Refresh evidence ────────────────────────────────────────── */
-
+/* ── Refresh evidence ──────────────────────────────────── */
 export async function refreshEvidence(payload: RefreshEvidencePayload): Promise<RefreshResult> {
-  return jsonFetch<RefreshResult>('/api/evidence/refresh', {
+  const json = await fetchJson('/api/evidence/refresh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  const raw = json && typeof json === 'object' ? json : {};
+  return {
+    targetRunId: raw.target_run_id || raw.run_id || raw.evidence_run_id,
+    evidenceRunId: raw.evidence_run_id || raw.run_id,
+    runId: raw.run_id,
+    jobId: raw.job_id,
+  };
 }
 
-/* ── Report history ──────────────────────────────────────────── */
-
+/* ── Report history ────────────────────────────────────── */
 export async function fetchReportHistory(brand?: string, market?: string): Promise<ReportHistoryRun[]> {
   const params = new URLSearchParams();
   if (brand) params.set('brand', brand);
   if (market) params.set('market', market);
-  params.set('limit', '30');
-  const raw = await jsonFetch<unknown>(`/api/evidence/reports/history?${params.toString()}`);
-  if (Array.isArray(raw)) return raw as ReportHistoryRun[];
-  if (raw && typeof raw === 'object' && 'runs' in raw && Array.isArray((raw as Record<string, unknown>).runs)) return (raw as Record<string, unknown>).runs as ReportHistoryRun[];
+  params.set('limit', '50');
+  const json = await fetchJson(`/api/evidence/reports/history?${params.toString()}`);
+  if (Array.isArray(json)) return json;
+  if (json && typeof json === 'object' && Array.isArray(json.runs)) return json.runs;
+  if (json && typeof json === 'object' && Array.isArray(json.history)) return json.history;
   return [];
 }
 
 export async function fetchReportByRunId(runId: string): Promise<ReportBundle> {
-  const payload = await jsonFetch<Record<string, unknown>>(`/api/evidence/reports/${encodeURIComponent(runId)}`);
-  return normaliseReport(payload);
+  const json = await fetchJson(`/api/evidence/reports/${encodeURIComponent(runId)}`);
+  return normaliseReport(json);
 }
 
-/** @deprecated alias kept for backward compatibility */
-export const fetchRunHistory = fetchReportHistory;
-/** @deprecated alias kept for backward compatibility */
-export const fetchRunReport = fetchReportByRunId;
+/* ── Delete run ────────────────────────────────────────── */
+export async function deleteRun(runId: string): Promise<void> {
+  await fetchJson(`/api/evidence/reports/${encodeURIComponent(runId)}`, { method: 'DELETE' });
+}
 
-/* ── Brand configuration ─────────────────────────────────────── */
-
+/* ── Brand config CRUD ─────────────────────────────────── */
 export async function fetchBrandConfigs(): Promise<BrandConfig[]> {
-  const raw = await jsonFetch<unknown>('/api/evidence/brands');
-  if (Array.isArray(raw)) return raw as BrandConfig[];
-  if (raw && typeof raw === 'object' && 'configs' in raw && Array.isArray((raw as Record<string, unknown>).configs)) return (raw as Record<string, unknown>).configs as BrandConfig[];
+  const json = await fetchJson('/api/evidence/brands');
+  if (Array.isArray(json)) return json;
+  if (json && typeof json === 'object' && Array.isArray(json.configs)) return json.configs;
+  if (json && typeof json === 'object' && Array.isArray(json.brands)) return json.brands;
   return [];
 }
 
 export async function saveBrandConfig(config: Partial<BrandConfig> & { brand: string; market: string }): Promise<BrandConfig> {
-  return jsonFetch<BrandConfig>('/api/evidence/brands', {
+  return fetchJson('/api/evidence/brands', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -203,17 +178,16 @@ export async function saveBrandConfig(config: Partial<BrandConfig> & { brand: st
 }
 
 export async function deleteBrandConfig(brand: string, market: string): Promise<void> {
-  await jsonFetch(`/api/evidence/brands/${encodeURIComponent(brand)}/${encodeURIComponent(market)}`, { method: 'DELETE' });
+  await fetchJson(`/api/evidence/brands/${encodeURIComponent(brand)}/${encodeURIComponent(market)}`, { method: 'DELETE' });
 }
 
-/* ── Portfolio ───────────────────────────────────────────────── */
-
+/* ── Portfolio ─────────────────────────────────────────── */
 export async function fetchPortfolioTemplate(brand?: string, market?: string, domain?: string): Promise<Record<string, unknown>> {
   const params = new URLSearchParams();
   if (brand) params.set('brand', brand);
   if (market) params.set('market', market);
   if (domain) params.set('domain', domain);
-  return jsonFetch<Record<string, unknown>>(`/api/evidence/portfolios/template?${params.toString()}`);
+  return fetchJson(`/api/evidence/portfolios/template?${params.toString()}`);
 }
 
 export async function uploadPortfolio(portfolio: Record<string, unknown>, brand?: string, market?: string, domain?: string): Promise<Record<string, unknown>> {
@@ -221,7 +195,7 @@ export async function uploadPortfolio(portfolio: Record<string, unknown>, brand?
   if (brand) params.set('brand', brand);
   if (market) params.set('market', market);
   if (domain) params.set('domain', domain);
-  return jsonFetch<Record<string, unknown>>(`/api/evidence/portfolios/upload?${params.toString()}`, {
+  return fetchJson(`/api/evidence/portfolios/upload?${params.toString()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(portfolio),
@@ -229,7 +203,7 @@ export async function uploadPortfolio(portfolio: Record<string, unknown>, brand?
 }
 
 export async function validatePortfolio(portfolio: Record<string, unknown>): Promise<PortfolioValidationResult> {
-  return jsonFetch<PortfolioValidationResult>('/api/evidence/portfolios/validate', {
+  return fetchJson('/api/evidence/portfolios/validate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(portfolio),
