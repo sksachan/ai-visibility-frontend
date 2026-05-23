@@ -1,300 +1,237 @@
 /**
- * normaliseReport — transforms snake_case backend payload into camelCase ReportBundle.
- *
- * This is the single source of truth for mapping backend JSON → frontend types.
- * It must be defensive: any missing field gets a safe default so the UI never crashes.
+ * Normalise any backend payload shape into the canonical ReportBundle.
+ * This file MUST exist at src/lib/normaliseReport.ts for the frontend to build.
  */
 import type {
-  ReportBundle, ExecutiveSection, HeadlineMetrics, BrandTopicScorecardRow,
-  QueryDiagnostic, OwnedPage, RecommendationModule, ActionItem,
-  CitationExample, SourceTypeCount, TrendPoint, CompetitorVisibility,
-  AiHygiene, QueryWorkbenchItem, AdvancedGeoAsset, AdvancedPrAssetPack,
+  ReportBundle, ExecutiveSection, HeadlineMetrics, QueryDiagnostic,
+  OwnedPage, RecommendationModule, ActionItem, CitationExample,
+  CompetitorVisibility, SourceTypeCount, TrendPoint, AiHygiene,
+  BrandTopicScorecardRow, QueryWorkbenchItem,
 } from '../types/report';
 
-/* ── tiny helpers ─────────────────────────────────────────────────── */
-
-function str(v: unknown): string { return v == null ? '' : String(v); }
-function num(v: unknown): number { try { const n = Number(v); return Number.isFinite(n) ? n : 0; } catch { return 0; } }
-function arr<T = unknown>(v: unknown): T[] { return Array.isArray(v) ? v : []; }
+function str(v: unknown): string { return typeof v === 'string' ? v : v != null ? String(v) : ''; }
+function num(v: unknown, fallback = 0): number { const n = Number(v); return Number.isFinite(n) ? n : fallback; }
+function arr(v: unknown): unknown[] { return Array.isArray(v) ? v : []; }
 function obj(v: unknown): Record<string, unknown> { return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}; }
-function bool(v: unknown): boolean { return v === true || v === 'true' || v === 1; }
+function bool(v: unknown, fallback = false): boolean { if (typeof v === 'boolean') return v; if (v == null) return fallback; return Boolean(v); }
 
-function firstOf<T>(record: Record<string, unknown>, ...keys: string[]): T | undefined {
-  for (const k of keys) { if (record[k] !== undefined && record[k] !== null && record[k] !== '') return record[k] as T; }
-  return undefined;
-}
-
-/* ── unwrap nested payloads ──────────────────────────────────────── */
-
-function unwrap(raw: unknown): Record<string, unknown> {
-  let current = raw;
-  if (typeof current === 'string') { try { current = JSON.parse(current); } catch { /* keep string */ } }
-  if (!current || typeof current !== 'object' || Array.isArray(current)) return {};
-  const o = current as Record<string, unknown>;
-  for (const key of ['frontend_report_bundle', 'report_bundle', 'bundle', 'report', 'payload', 'data']) {
-    const nested = o[key];
-    if (nested && typeof nested === 'object' && !Array.isArray(nested)) return unwrap(nested);
-    if (typeof nested === 'string') { try { return unwrap(JSON.parse(nested)); } catch { /* skip */ } }
-  }
-  // Bodhi Preview Node wrapper
-  if (o['Preview Node'] && typeof o['Preview Node'] === 'object') {
-    const pn = o['Preview Node'] as Record<string, unknown>;
-    const stdout = (pn.data as Record<string, unknown>)?.stdout;
-    if (typeof stdout === 'string') { try { return unwrap(JSON.parse(stdout)); } catch { /* skip */ } }
-  }
-  return o;
-}
-
-/* ── citation normaliser ─────────────────────────────────────────── */
-
-function normaliseCitation(r: Record<string, unknown>): CitationExample {
+function parseCitation(r: unknown): CitationExample {
+  const c = obj(r);
   return {
-    title: str(r.title || r.source_name),
-    url: str(r.url || r.source_url || r.link || r.href),
-    domain: str(r.domain || r.source_domain),
-    sourceType: str(r.sourceType || r.source_type || r.source_category),
-    citationPosition: num(r.citationPosition ?? r.citation_position ?? r.rank),
-    snippet: str(r.snippet || r.citation_text || r.text || r.summary),
-    queryId: str(r.queryId || r.query_id),
-    query: str(r.query),
-    isCompetitor: bool(r.isCompetitor ?? r.is_competitor),
-    isOwnedTargetPage: bool(r.isOwnedTargetPage ?? r.is_owned_target_page),
+    title: str(c.title || c.source_name),
+    url: str(c.url || c.source_url || c.link || c.href),
+    domain: str(c.domain || c.source_domain),
+    sourceType: str(c.sourceType || c.source_type || c.source_category),
+    citationPosition: c.citationPosition != null ? num(c.citationPosition) : c.citation_position != null ? num(c.citation_position) : c.rank != null ? num(c.rank) : undefined,
+    snippet: str(c.snippet || c.citation_text || c.text || c.summary),
+    queryId: str(c.queryId || c.query_id) || undefined,
+    query: str(c.query) || undefined,
+    isCompetitor: bool(c.isCompetitor ?? c.is_competitor),
+    isOwnedTargetPage: bool(c.isOwnedTargetPage ?? c.is_owned_target_page),
   };
 }
 
-/* ── query normaliser ────────────────────────────────────────────── */
-
-function normaliseQuery(r: Record<string, unknown>, index: number): QueryDiagnostic {
-  const vis = obj(r.current_ai_visibility || r.currentAiVisibility);
-  const citations = arr(vis.top_citations || vis.topCitations || r.citations).map((c: unknown) => normaliseCitation(obj(c)));
-  const competitors = arr(vis.competitors || r.competitors || r.competitorBrands).map(str);
+function parseQuery(r: unknown, idx: number): QueryDiagnostic {
+  const q = obj(r);
+  const vis = obj(q.current_ai_visibility || q.currentAiVisibility);
+  const citations = arr(vis.top_citations || vis.topCitations || q.citations).map(parseCitation);
   return {
-    id: str(r.query_id || r.id || r.qid || `q${index + 1}`),
-    query: str(r.query || r.search_query || r.question),
-    journey: str(r.journey || r.journey_category || r.journey_stage),
-    visibilityStatus: str(r.visibilityStatus || r.visibility_status || vis.status),
-    ownedTargetPageCited: bool(r.ownedTargetPageCited ?? r.owned_target_page_cited ?? vis.owned_target_cited),
-    ownedDomainCited: bool(r.ownedDomainCited ?? r.owned_domain_cited ?? vis.owned_domain_cited),
-    winningExternalSourceTypes: arr(r.winningExternalSourceTypes || r.winning_external_source_types),
-    ownedGeoScore120: num(r.ownedGeoScore120 ?? r.owned_geo_score_120),
-    externalBenchmarkScore: num(r.externalBenchmarkScore ?? r.external_benchmark_score),
-    sourcePreferenceGap: num(r.sourcePreferenceGap ?? r.source_preference_gap),
-    gapReasons: arr(r.gapReasons || r.gap_reasons).map(str),
+    id: str(q.query_id || q.id || q.qid || `q${idx + 1}`),
+    query: str(q.query || q.search_query || q.question),
+    journey: str(q.journey || q.journey_category || q.journey_stage),
+    visibilityStatus: str(q.visibilityStatus || q.visibility_status || vis.status),
+    ownedTargetPageCited: bool(q.ownedTargetPageCited ?? q.owned_target_page_cited ?? vis.owned_target_cited),
+    ownedDomainCited: (q.ownedDomainCited ?? q.owned_domain_cited ?? vis.owned_domain_cited) != null ? bool(q.ownedDomainCited ?? q.owned_domain_cited ?? vis.owned_domain_cited) : undefined,
+    winningExternalSourceTypes: arr(q.winningExternalSourceTypes || q.winning_external_source_types).map(String),
+    ownedGeoScore120: num(q.ownedGeoScore120 ?? q.owned_geo_score_120),
+    externalBenchmarkScore: num(q.externalBenchmarkScore ?? q.external_benchmark_score),
+    sourcePreferenceGap: num(q.sourcePreferenceGap ?? q.source_preference_gap),
+    gapReasons: arr(q.gapReasons || q.gap_reasons || q.geo_gaps).map(String),
     citations,
-    brandPosition: num(r.brandPosition ?? r.brand_position),
-    leadingCompetitor: str(r.leadingCompetitor || r.leading_competitor || competitors[0]),
-    leadingPublisher: str(r.leadingPublisher || r.leading_publisher),
-    sourceType: str(r.sourceType || r.source_type),
-    citationLikelihood: num(r.citationLikelihood ?? r.citation_likelihood),
-    confidence: num(r.confidence),
-    aiVisibilityScore: num(vis.score ?? r.aiVisibilityScore ?? r.ai_visibility_score),
-    competitorBrands: competitors,
-    competitorCitationCount: num(vis.competitor_citation_count ?? r.competitorCitationCount),
-    issue: str(r.issue || r.gap_summary),
-    recommendedMove: str(r.recommendedMove || r.recommended_move || r.recommendation),
+    brandPosition: num(q.brandPosition ?? q.brand_position),
+    leadingCompetitor: str(q.leadingCompetitor || q.leading_competitor),
+    leadingPublisher: str(q.leadingPublisher || q.leading_publisher),
+    sourceType: str(q.sourceType || q.source_type),
+    citationLikelihood: num(q.citationLikelihood ?? q.citation_likelihood),
+    confidence: num(q.confidence),
+    aiVisibilityScore: vis.score != null ? num(vis.score) : undefined,
+    competitorBrands: arr(vis.competitors || q.competitor_brands || q.competitorBrands).map(String),
+    competitorCitationCount: num(vis.competitor_citation_count ?? q.competitorCitationCount ?? q.competitor_citation_count),
+    issue: str(q.issue || q.gap_summary),
+    recommendedMove: str(q.recommendedMove || q.recommended_move || q.recommendation),
   };
 }
 
-/* ── owned page normaliser ───────────────────────────────────────── */
-
-function normaliseOwnedPage(r: Record<string, unknown>): OwnedPage {
-  const dims = obj(r.geo_dimensions || r.dimensions || r.dimension_scores || r.geoDimensions);
-  const tech = obj(r.technical_signals || r.technicalSignals);
-  const relatedRaw = arr(r.related_queries || r.relatedQueries || r.mapped_queries);
+function parseOwnedPage(r: unknown): OwnedPage {
+  const p = obj(r);
+  const dims = obj(p.geo_dimensions || p.dimensions || p.dimension_scores || p.geoDimensions);
+  const tech = obj(p.technical_signals || p.technicalSignals);
+  const score = num(p.current_geo_score_120 ?? p.geoScore ?? p.geo_score_120 ?? p.readiness_score ?? p.score_120);
   return {
-    url: str(r.url || r.page_url || r.target_url),
-    title: str(r.title || r.page_title),
-    journeyCategory: str(r.journeyCategory || r.journey_category || r.journey_stage || 'Unclassified'),
-    evidenceMatchStatus: str(r.evidenceMatchStatus || r.evidence_match_status || r.score_band),
-    mappedQuery: str(r.mappedQuery || r.mapped_query),
-    relatedQueries: relatedRaw.map((q: unknown) => {
-      const qo = obj(q);
-      return { id: str(qo.id || qo.query_id), query: str(qo.query || qo.text), visibilityStatus: str(qo.visibility_status || qo.visibilityStatus) };
+    url: str(p.url || p.page_url || p.target_url),
+    title: str(p.title || p.page_title) || undefined,
+    journeyCategory: str(p.journeyCategory || p.journey_category || p.journey),
+    evidenceMatchStatus: str(p.evidenceMatchStatus || p.evidence_match_status) || undefined,
+    mappedQuery: str(p.mappedQuery || p.mapped_query),
+    relatedQueries: arr(p.related_queries || p.relatedQueries).map((rq) => {
+      const q = obj(rq);
+      return { id: str(q.id || q.query_id), query: str(q.query), visibilityStatus: str(q.visibility_status || q.visibilityStatus) || undefined };
     }),
-    geoScore: num(r.current_geo_score_120 ?? r.geoScore ?? r.geo_score_120 ?? r.readiness_score ?? r.score_120),
-    scoreBand: str(r.scoreBand || r.score_band),
-    clarity: num(dims.content_clarity ?? r.clarity),
-    semanticDepth: num(dims.semantic_depth ?? r.semanticDepth ?? r.semantic_depth),
-    evidence: num(dims.eeat_signals ?? r.evidence ?? r.eeat_signals),
-    structure: num(dims.structured_data ?? r.structure ?? r.structured_data),
-    freshness: num(dims.freshness_index ?? r.freshness ?? r.freshness_index),
-    authority: num(r.authority ?? dims.eeat_signals),
-    faqReadiness: dims.faq_readiness != null || r.faq_readiness != null || r.faqReadiness != null ? num(r.faqReadiness ?? r.faq_readiness ?? dims.faq_readiness) : undefined,
-    diagnostics: arr(r.diagnostics || r.geo_gaps),
-    recommendedHtmlChanges: arr(r.recommendedHtmlChanges || r.recommended_html_changes).length ? arr(r.recommendedHtmlChanges || r.recommended_html_changes) : undefined,
-    queryMapped: bool(r.queryMapped ?? r.query_mapped),
-    inventorySource: str(r.inventorySource || r.inventory_source) || undefined,
-    scoringMethod: str(r.scoringMethod || r.scoring_method) || undefined,
-    scoringNotes: str(r.scoringNotes || r.scoring_notes) || undefined,
-    technicalSignals: {
+    geoScore: score,
+    scoreBand: str(p.scoreBand || p.score_band) || undefined,
+    clarity: num(dims.content_clarity ?? dims.clarity ?? p.clarity),
+    semanticDepth: num(dims.semantic_depth ?? dims.semanticDepth ?? p.semanticDepth ?? p.semantic_depth),
+    evidence: num(dims.structured_data ?? dims.evidence ?? p.evidence ?? p.structured_data),
+    structure: num(dims.eeat_signals ?? dims.structure ?? p.structure ?? p.eeat_signals),
+    freshness: num(dims.freshness_index ?? dims.freshness ?? p.freshness ?? p.freshness_index),
+    authority: num(dims.eeat_signals ?? dims.authority ?? p.authority),
+    faqReadiness: dims.faq_readiness != null || dims.faqReadiness != null || p.faq_readiness != null || p.faqReadiness != null ? num(dims.faq_readiness ?? dims.faqReadiness ?? p.faq_readiness ?? p.faqReadiness) : undefined,
+    diagnostics: arr(p.diagnostics || p.geo_gaps).map(String),
+    recommendedHtmlChanges: arr(p.recommendedHtmlChanges || p.recommended_html_changes).length ? arr(p.recommendedHtmlChanges || p.recommended_html_changes).map(String) : undefined,
+    queryMapped: p.queryMapped != null ? bool(p.queryMapped) : p.query_mapped != null ? bool(p.query_mapped) : undefined,
+    inventorySource: str(p.inventorySource || p.inventory_source) || undefined,
+    scoringMethod: str(p.scoringMethod || p.scoring_method) || undefined,
+    scoringNotes: str(p.scoringNotes || p.scoring_notes) || undefined,
+    technicalSignals: tech && Object.keys(tech).length ? {
       jsonLdPresent: tech.json_ld_present != null ? bool(tech.json_ld_present) : tech.jsonLdPresent != null ? bool(tech.jsonLdPresent) : undefined,
-      schemaTypes: arr(tech.schema_types || tech.schemaTypes).map(str),
+      schemaTypes: arr(tech.schema_types || tech.schemaTypes).map(String),
       robotsMeta: str(tech.robots_meta || tech.robotsMeta) || undefined,
       canonicalUrl: str(tech.canonical_url || tech.canonicalUrl) || undefined,
       metaDescriptionPresent: tech.meta_description_present != null ? bool(tech.meta_description_present) : undefined,
       crawlStatus: str(tech.crawl_status || tech.crawlStatus) || undefined,
-      wordCount: tech.word_count != null || tech.wordCount != null ? num(tech.word_count ?? tech.wordCount) : undefined,
+      wordCount: tech.word_count != null ? num(tech.word_count) : tech.wordCount != null ? num(tech.wordCount) : undefined,
       markdownChars: tech.markdown_chars != null ? num(tech.markdown_chars) : undefined,
-    },
+    } : undefined,
   };
 }
 
-/* ── recommendation normaliser ───────────────────────────────────── */
-
-function normaliseRecommendation(r: Record<string, unknown>): RecommendationModule {
+function parseRec(r: unknown): RecommendationModule {
+  const m = obj(r);
   return {
-    title: str(r.title || r.action),
-    targetUrl: str(r.targetUrl || r.target_url || r.url),
-    recommendation: str(r.recommendation || r.recommended_change || r.description),
-    evidencePattern: str(r.evidencePattern || r.evidence_pattern || r.winning_pattern_to_copy),
-    priority: (str(r.priority) || 'Medium') as RecommendationModule['priority'],
-    owner: str(r.owner),
-    journeyCategory: str(r.journeyCategory || r.journey_category) || undefined,
-    moduleType: str(r.moduleType || r.module_type) || undefined,
-    placement: str(r.placement || r.recommendedPlacement || r.recommended_placement) || undefined,
-    valueScore: r.valueScore != null || r.value_score != null ? num(r.valueScore ?? r.value_score) : undefined,
-    queryCoverageCount: r.queryCoverageCount != null || r.query_coverage_count != null ? num(r.queryCoverageCount ?? r.query_coverage_count) : undefined,
-    linkedQueryIds: arr(r.linkedQueryIds || r.linked_query_ids || r.linked_queries).map((q: unknown) => typeof q === 'object' ? str((q as Record<string, unknown>).query_id) : str(q)),
-    sourceType: str(r.sourceType || r.source_type) || undefined,
-    sourceRecommendationId: str(r.sourceRecommendationId || r.recommendation_id) || undefined,
-    advancedGeoAsset: (r.advanced_geo_asset || r.advancedGeoAsset) ? (r.advanced_geo_asset || r.advancedGeoAsset) as AdvancedGeoAsset : undefined,
-    advancedPrAssetPack: (r.advanced_pr_asset_pack || r.advancedPrAssetPack) ? (r.advanced_pr_asset_pack || r.advancedPrAssetPack) as AdvancedPrAssetPack : undefined,
+    title: str(m.title),
+    targetUrl: str(m.targetUrl || m.target_url || m.url),
+    recommendation: str(m.recommendation || m.recommended_change || m.recommended_pr_action),
+    evidencePattern: str(m.evidencePattern || m.evidence_pattern || m.winning_pattern_to_copy),
+    priority: (str(m.priority) || 'Medium') as RecommendationModule['priority'],
+    owner: str(m.owner),
+    journeyCategory: str(m.journeyCategory || m.journey_category) || undefined,
+    moduleType: str(m.moduleType || m.module_type) || undefined,
+    placement: str(m.placement || m.recommended_placement) || undefined,
+    introCopy: str(m.introCopy || m.intro_copy) || undefined,
+    bodyCopy: str(m.bodyCopy || m.body_copy) || undefined,
+    bulletPoints: arr(m.bulletPoints || m.bullets || m.content_requirements).map(String),
+    faqItems: arr(m.faqItems || m.faq_items).map((f) => { const fq = obj(f); return { question: str(fq.question), answer: str(fq.answer) }; }),
+    validationRequired: arr(m.validationRequired || m.validation_required).map(String),
+    whyItMatters: str(m.whyItMatters || m.why_it_matters) || undefined,
+    evidenceBasis: str(m.evidenceBasis || m.evidence_basis) || undefined,
+    targetSourceTypes: arr(m.targetSourceTypes || m.target_source_types).map(String),
+    valueScore: m.valueScore != null || m.value_score != null ? num(m.valueScore ?? m.value_score) : undefined,
+    queryCoverageCount: m.queryCoverageCount != null || m.query_coverage_count != null ? num(m.queryCoverageCount ?? m.query_coverage_count) : undefined,
+    linkedQueryIds: arr(m.linkedQueryIds || m.linked_query_ids || m.linked_queries).map((q: unknown) => typeof q === 'object' ? str((q as Record<string, unknown>).query_id) : str(q)),
+    sourceType: str(m.sourceType || m.source_type) || undefined,
+    sourceRecommendationId: str(m.sourceRecommendationId || m.recommendation_id) || undefined,
+    advancedGeoAsset: (m.advanced_geo_asset || m.advancedGeoAsset) as RecommendationModule['advancedGeoAsset'],
+    advancedPrAssetPack: (m.advanced_pr_asset_pack || m.advancedPrAssetPack) as RecommendationModule['advancedPrAssetPack'],
   };
 }
 
-/* ── action normaliser ───────────────────────────────────────────── */
-
-function normaliseAction(r: Record<string, unknown>): ActionItem {
+function parseAction(r: unknown): ActionItem {
+  const a = obj(r);
   return {
-    action: str(r.action || r.title),
-    owner: str(r.owner),
-    priority: (str(r.priority) || 'Medium') as ActionItem['priority'],
-    effort: (str(r.effort) || 'M') as ActionItem['effort'],
-    status: (str(r.status) || 'Not started') as ActionItem['status'],
-    dependency: str(r.dependency) || undefined,
-    source: str(r.source) || undefined,
-    target: str(r.target || r.target_url) || undefined,
-    workstream: str(r.workstream) || undefined,
-    category: str(r.category) || undefined,
-    valueScore: r.value_score != null || r.valueScore != null ? num(r.value_score ?? r.valueScore) : undefined,
-    queryCoverageCount: r.query_coverage_count != null || r.queryCoverageCount != null ? num(r.query_coverage_count ?? r.queryCoverageCount) : undefined,
-    linkedQueryIds: arr(r.linked_query_ids || r.linkedQueryIds).map(str),
-    moduleType: str(r.module_type || r.moduleType) || undefined,
+    action: str(a.action || a.title),
+    owner: str(a.owner),
+    priority: (str(a.priority) || 'Medium') as ActionItem['priority'],
+    effort: (str(a.effort) || 'M') as ActionItem['effort'],
+    status: (str(a.status) || 'Not started') as ActionItem['status'],
+    dependency: str(a.dependency) || undefined,
+    source: str(a.source) || undefined,
+    target: str(a.target || a.target_url) || undefined,
+    workstream: str(a.workstream) || undefined,
+    category: str(a.category) || undefined,
+    valueScore: a.value_score != null || a.valueScore != null ? num(a.value_score ?? a.valueScore) : undefined,
+    queryCoverageCount: a.query_coverage_count != null || a.queryCoverageCount != null ? num(a.query_coverage_count ?? a.queryCoverageCount) : undefined,
+    linkedQueryIds: arr(a.linked_query_ids || a.linkedQueryIds).map(String),
+    moduleType: str(a.module_type || a.moduleType) || undefined,
   };
 }
 
-/* ── main normaliser ─────────────────────────────────────────────── */
+function parseScorecard(r: unknown): BrandTopicScorecardRow {
+  const s = obj(r);
+  return {
+    topic: str(s.topic),
+    aiVisibilityScore: s.aiVisibilityScore != null ? num(s.aiVisibilityScore) : s.ai_visibility_score != null ? num(s.ai_visibility_score) : null,
+    relativePosition: str(s.relativePosition || s.relative_position),
+    directionVsLastPeriod: str(s.directionVsLastPeriod || s.direction_vs_last_period),
+    comment: str(s.comment),
+    queryCount: s.queryCount != null ? num(s.queryCount) : s.query_count != null ? num(s.query_count) : undefined,
+    ownedUrlCount: s.ownedUrlCount != null ? num(s.ownedUrlCount) : s.owned_url_count != null ? num(s.owned_url_count) : undefined,
+    citationCount: s.citationCount != null ? num(s.citationCount) : s.citation_count != null ? num(s.citation_count) : undefined,
+  };
+}
 
 export function normaliseReport(raw: unknown): ReportBundle {
-  const o = unwrap(raw);
+  const p = obj(raw);
+  const runId = str(p.run_id || p.runId);
+  const brand = str(p.brand);
+  const market = str(p.market);
+  const generatedAt = str(p.generated_at || p.generatedAt);
+  const evidenceDate = str(p.evidence_date || p.evidenceDate || generatedAt);
 
-  const runId = str(o.run_id || o.runId || 'unknown');
-  const brand = str(o.brand || 'Unknown');
-  const market = str(o.market || 'Unknown');
-  const generatedAt = str(o.generated_at || o.generatedAt || new Date().toISOString());
-  const evidenceDate = str(o.evidence_date || o.evidenceDate || generatedAt.slice(0, 10));
-
-  // Executive
-  const exec = obj(o.executive || o.executive_report || o.executive_summary);
-  const hm = obj(exec.headline_metrics || exec.headlineMetrics || o.headline_metrics);
+  const exec = obj(p.executive || p.executive_report);
+  const hm = obj(exec.headline_metrics || exec.headlineMetrics);
   const headlineMetrics: HeadlineMetrics = {
     brandScore: num(hm.ai_visibility_score ?? hm.brandScore ?? hm.brand_score),
     ownedTargetCitations: num(hm.owned_target_page_citations ?? hm.ownedTargetCitations ?? hm.owned_target_citations),
     ownedDomainCitations: num(hm.owned_domain_citations ?? hm.ownedDomainCitations),
     competitorLedQueries: num(hm.competitor_led_query_count ?? hm.competitorLedQueries ?? hm.competitor_led_queries),
     externalLedQueries: num(hm.external_led_query_count ?? hm.externalLedQueries ?? hm.external_led_queries),
-    queryCount: num(hm.query_count ?? hm.queryCount),
-    ownedPageCount: num(hm.owned_page_count ?? hm.ownedPageCount),
-    externalSourceCount: num(hm.external_source_count ?? hm.externalSourceCount),
-    averageOwnedGeoScore120: num(hm.average_owned_geo_score_120 ?? hm.averageOwnedGeoScore120),
+    queryCount: hm.query_count != null ? num(hm.query_count) : hm.queryCount != null ? num(hm.queryCount) : undefined,
+    ownedPageCount: hm.owned_page_count != null ? num(hm.owned_page_count) : hm.ownedPageCount != null ? num(hm.ownedPageCount) : undefined,
+    externalSourceCount: hm.external_source_count != null ? num(hm.external_source_count) : undefined,
+    averageOwnedGeoScore120: hm.average_owned_geo_score_120 != null ? num(hm.average_owned_geo_score_120) : hm.averageOwnedGeoScore120 != null ? num(hm.averageOwnedGeoScore120) : undefined,
   };
-  const scorecard = arr(exec.brandTopicScorecard || exec.brand_topic_scorecard || (obj(o.executive_summary)).brand_topic_scorecard).map((r: unknown): BrandTopicScorecardRow => {
-    const row = obj(r);
-    return {
-      topic: str(row.topic),
-      aiVisibilityScore: row.aiVisibilityScore != null || row.ai_visibility_score != null ? num(row.aiVisibilityScore ?? row.ai_visibility_score) : null,
-      relativePosition: str(row.relativePosition || row.relative_position),
-      directionVsLastPeriod: str(row.directionVsLastPeriod || row.direction_vs_last_period),
-      comment: str(row.comment),
-      queryCount: num(row.queryCount ?? row.query_count),
-      ownedUrlCount: num(row.ownedUrlCount ?? row.owned_url_count),
-      citationCount: num(row.citationCount ?? row.citation_count),
-    };
-  });
+
+  const scorecard = arr(exec.brandTopicScorecard || exec.brand_topic_scorecard || obj(p.executive_summary).brand_topic_scorecard).map(parseScorecard);
+
   const executive: ExecutiveSection = {
     summary: str(exec.summary),
-    whatIsHappening: arr(exec.what_is_happening || exec.whatIsHappening).map(str),
-    whyNow: arr(exec.why_now || exec.whyNow).map(str),
-    priorityActions: arr(exec.priority_actions || exec.priorityActions).map(str),
+    whatIsHappening: arr(exec.what_is_happening || exec.whatIsHappening).map(String),
+    whyNow: arr(exec.why_now || exec.whyNow).map(String),
+    priorityActions: arr(exec.priority_actions || exec.priorityActions).map(String),
     headlineMetrics,
     brandTopicScorecard: scorecard.length ? scorecard : undefined,
   };
 
-  // Visibility
-  const vis = obj(o.visibility);
-  const bvc = arr(vis.brandVsCompetitors || vis.brand_vs_competitors || o.competitors).map((c: unknown): CompetitorVisibility => {
-    const co = obj(c);
-    return { name: str(co.name), visibility: num(co.visibility), citationShare: num(co.citationShare ?? co.citation_share), sentiment: num(co.sentiment), position: (str(co.position) || 'Watchlist') as CompetitorVisibility['position'] };
-  });
+  const vis = obj(p.visibility);
   const visibility = {
     brandScore: num(vis.brandScore ?? vis.brand_score ?? headlineMetrics.brandScore),
     ownedTargetCitations: num(vis.ownedTargetCitations ?? vis.owned_target_citations ?? headlineMetrics.ownedTargetCitations),
     ownedDomainCitations: num(vis.ownedDomainCitations ?? vis.owned_domain_citations ?? headlineMetrics.ownedDomainCitations),
     competitorLedQueries: num(vis.competitorLedQueries ?? vis.competitor_led_queries ?? headlineMetrics.competitorLedQueries),
     externalLedQueries: num(vis.externalLedQueries ?? vis.external_led_queries ?? headlineMetrics.externalLedQueries),
-    brandVsCompetitors: bvc,
+    brandVsCompetitors: arr(vis.brandVsCompetitors || vis.brand_vs_competitors).map((c) => {
+      const cv = obj(c);
+      return { name: str(cv.name), visibility: num(cv.visibility), citationShare: num(cv.citationShare ?? cv.citation_share), sentiment: num(cv.sentiment), position: (str(cv.position) || 'Watchlist') as CompetitorVisibility['position'] };
+    }),
   };
 
-  // Source landscape
-  const sl = obj(o.source_landscape || o.sourceLandscape);
-  const stc = arr(sl.source_type_counts || sl.sourceTypeCounts).map((s: unknown): SourceTypeCount => {
-    const so = obj(s); return { sourceType: str(so.sourceType || so.source_type), count: num(so.count) };
-  });
-  const ond = arr(sl.observed_non_owned_domains || sl.observedNonOwnedDomains).map((d: unknown) => {
-    const dd = obj(d);
-    return { domain: str(dd.domain || dd.source_domain), sourceType: str(dd.sourceType || dd.source_type), observedCount: num(dd.observedCount ?? dd.observed_count ?? dd.count), exampleUrl: str(dd.exampleUrl || dd.example_url) || undefined, exampleQuery: str(dd.exampleQuery || dd.example_query) || undefined };
-  });
-  const wsp = arr(sl.winning_source_patterns || sl.winningSourcePatterns).map((p: unknown) => {
-    const po = obj(p); return { sourceType: str(po.sourceType || po.source_type), citationCount: num(po.citationCount ?? po.citation_count ?? po.count), winningPattern: str(po.winningPattern || po.winning_pattern || po.pattern_type) };
-  });
-  const sourceCitations = arr(sl.source_citations || sl.sourceCitations).map((c: unknown) => normaliseCitation(obj(c)));
-  const sourceLandscape = { sourceTypeCounts: stc, observedNonOwnedDomains: ond, winningSourcePatterns: wsp, sourceCitations: sourceCitations.length ? sourceCitations : undefined };
+  const sl = obj(p.source_landscape || p.sourceLandscape);
+  const sourceLandscape = {
+    sourceTypeCounts: arr(sl.source_type_counts || sl.sourceTypeCounts).map((s) => { const st = obj(s); return { sourceType: str(st.sourceType || st.source_type), count: num(st.count) } as SourceTypeCount; }),
+    observedNonOwnedDomains: arr(sl.observed_non_owned_domains || sl.observedNonOwnedDomains).map((d) => { const dd = obj(d); return { domain: str(dd.domain || dd.source_domain), sourceType: str(dd.sourceType || dd.source_type), observedCount: num(dd.observedCount ?? dd.observed_count ?? dd.count), exampleUrl: str(dd.exampleUrl || dd.example_url) || undefined, exampleQuery: str(dd.exampleQuery || dd.example_query) || undefined }; }),
+    winningSourcePatterns: arr(sl.winning_source_patterns || sl.winningSourcePatterns).map((w) => { const ww = obj(w); return { sourceType: str(ww.sourceType || ww.source_type), citationCount: num(ww.citationCount ?? ww.citation_count ?? ww.count), winningPattern: str(ww.winningPattern || ww.winning_pattern || ww.pattern_type) }; }),
+    sourceCitations: arr(sl.source_citations || sl.sourceCitations).map(parseCitation),
+  };
 
-  // Trend
-  const trend = arr(o.trend || o.run_history).map((t: unknown): TrendPoint => {
-    const to = obj(t); return { period: str(to.period), brandScore: num(to.brandScore ?? to.brand_score), ownedCitations: num(to.ownedCitations ?? to.owned_citations), competitorPressure: num(to.competitorPressure ?? to.competitor_pressure) };
-  });
-
-  // Queries — from query_workbench or legacy queries array
-  const queryWorkbenchRaw = arr(o.query_workbench || o.queryWorkbench);
-  const queries = queryWorkbenchRaw.length
-    ? queryWorkbenchRaw.map((q: unknown, i: number) => normaliseQuery(obj(q), i))
-    : arr(o.queries || o.query_evidence).map((q: unknown, i: number) => normaliseQuery(obj(q), i));
-
-  // Owned pages
-  const ownedPages = arr(o.owned_url_readiness || o.ownedPages || o.owned_pages || o.owned_readiness).map((p: unknown) => normaliseOwnedPage(obj(p)));
-
-  // CMS — prefer page_level_cms_recommendations
-  const cmsModules = arr(o.page_level_cms_recommendations || o.cms_recommendations || o.cmsModules || o.cms_modules).map((r: unknown) => normaliseRecommendation(obj(r)));
-
-  // PR — prefer grouped_pr_opportunities
-  const prOpportunities = arr(o.grouped_pr_opportunities || o.pr_opportunities || o.prOpportunities).map((r: unknown) => normaliseRecommendation(obj(r)));
-
-  // Action checklist
-  const actionChecklist = arr(o.action_checklist || o.actionChecklist || o.actions).map((a: unknown) => normaliseAction(obj(a)));
-
-  // Query workbench passthrough
-  const queryWorkbench: QueryWorkbenchItem[] | undefined = queryWorkbenchRaw.length ? queryWorkbenchRaw as QueryWorkbenchItem[] : undefined;
-
-  // AI Hygiene
-  const hyg = obj(o.ai_discoverability_hygiene || o.site_ai_hygiene || o.aiHygiene || o.ai_hygiene);
-  const aiHygiene: AiHygiene | undefined = Object.keys(hyg).length ? {
-    priority: str(hyg.priority) || undefined,
-    summary: str(hyg.summary) || undefined,
-    robots_txt: hyg.robots_txt ? obj(hyg.robots_txt) as AiHygiene['robots_txt'] : undefined,
-    llms_txt: hyg.llms_txt ? obj(hyg.llms_txt) as AiHygiene['llms_txt'] : undefined,
-    structured_data: hyg.structured_data ? obj(hyg.structured_data) as AiHygiene['structured_data'] : undefined,
-  } : undefined;
+  const trend: TrendPoint[] = arr(p.trend || p.run_history).map((t) => { const tp = obj(t); return { period: str(tp.period), brandScore: num(tp.brandScore ?? tp.brand_score), ownedCitations: num(tp.ownedCitations ?? tp.owned_citations), competitorPressure: num(tp.competitorPressure ?? tp.competitor_pressure) }; });
+  const queries = arr(p.query_workbench || p.queries || p.query_evidence).map(parseQuery);
+  const ownedPages = arr(p.owned_url_readiness || p.owned_readiness || p.ownedPages || p.owned_pages).map(parseOwnedPage);
+  const cmsModules = arr(p.page_level_cms_recommendations || p.cms_recommendations || p.cmsModules).map(parseRec);
+  const prOpportunities = arr(p.grouped_pr_opportunities || p.pr_opportunities || p.prOpportunities).map(parseRec);
+  const actionChecklist = arr(p.action_checklist || p.actionChecklist).map(parseAction);
+  const queryWorkbench: QueryWorkbenchItem[] | undefined = Array.isArray(p.query_workbench) ? p.query_workbench as QueryWorkbenchItem[] : undefined;
+  const rawHygiene = obj(p.ai_discoverability_hygiene || p.aiHygiene || p.site_ai_hygiene || p.ai_hygiene);
+  const aiHygiene: AiHygiene | undefined = Object.keys(rawHygiene).length ? rawHygiene as AiHygiene : undefined;
 
   return {
     runId, brand, market, generatedAt, evidenceDate,

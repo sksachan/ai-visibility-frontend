@@ -209,10 +209,10 @@ export function RefreshPanel({ brand: defaultBrand, market: defaultMarket }: { b
 
   return (
     <div className="space-y-4">
-      {/* Workflow timeline */}
+      {/* Workflow status bar (horizontal) */}
       <WorkspacePanel>
         <SectionHeader eyebrow="Workflow Status" title={statusText(status, trackedRunId)} />
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {workflowStages.map((stage, index) => {
             const state = isFailed && currentWfKey === stage.key ? 'failed' : isDone || (wfIdx >= 0 && index < wfIdx) ? 'done' : currentWfKey === stage.key ? 'active' : 'pending';
             return <WorkflowStage key={stage.key} label={stage.label} state={state} />;
@@ -220,7 +220,7 @@ export function RefreshPanel({ brand: defaultBrand, market: defaultMarket }: { b
         </div>
         {trackedRunId && <p className="mt-3 text-xs font-mono text-[var(--text-muted)]">Run: {trackedRunId}</p>}
         <div className="mt-3 flex gap-2">
-          <DarkButton onClick={() => void checkStatus()} disabled={isChecking}><RefreshCcw size={13} /> {isChecking ? 'Checking\u2026' : 'Check status'}</DarkButton>
+          <DarkButton onClick={() => void checkStatus()} disabled={isChecking}><RefreshCcw size={13} /> {isChecking ? 'Checking...' : 'Check status'}</DarkButton>
         </div>
       </WorkspacePanel>
 
@@ -229,7 +229,7 @@ export function RefreshPanel({ brand: defaultBrand, market: defaultMarket }: { b
         <SectionHeader eyebrow="Brand Configuration" title="Select or configure brand" />
         <div className="flex items-center gap-2">
           <select className={inputCls + ' flex-1'} value={selectedBrandKey} onChange={(e) => applyBrandConfig(e.target.value)}>
-            <option value="">\u2014 Select a saved brand \u2014</option>
+            <option value="">Select a saved brand</option>
             {brandConfigs.map((c) => <option key={`${c.brand}__${c.market}`} value={`${c.brand}__${c.market}`}>{c.brand} / {c.market}{c.domain ? ` (${c.domain})` : ''}</option>)}
           </select>
           <DarkButton onClick={() => void loadBrandConfigs()} disabled={brandConfigsLoading}><RefreshCcw size={13} /></DarkButton>
@@ -260,7 +260,7 @@ export function RefreshPanel({ brand: defaultBrand, market: defaultMarket }: { b
             <div className="flex items-center justify-between"><p className="text-sm font-semibold text-amber-300">Custom portfolio</p><DarkButton onClick={() => void onDownloadTemplate()}><Download size={13} /> Template</DarkButton></div>
             <div className="flex items-center gap-2"><DarkButton onClick={() => portfolioFileRef.current?.click()}><Upload size={13} /> Upload JSON</DarkButton><input ref={portfolioFileRef} className="hidden" type="file" accept="application/json,.json" onChange={(e) => void onPortfolioFileUpload(e.target.files?.[0])} /><span className="text-xs text-[var(--text-muted)]">or paste below</span></div>
             <textarea className={inputCls + ' min-h-24 font-mono text-xs'} value={portfolioJson} onChange={(e) => { setPortfolioJson(e.target.value); setPortfolioValidation(null); }} placeholder='{"topics": [...], "queries": [...]}' />
-            <div className="flex items-center gap-2"><DarkButton variant="primary" onClick={() => void onValidatePortfolio()} disabled={!portfolioJson.trim()}>Validate</DarkButton>{portfolioValidation && <span className={`text-xs font-medium ${portfolioValidation.status === 'error' ? 'text-[var(--accent-danger)]' : 'text-[var(--accent-success)]'}`}>{portfolioValidation.status === 'error' ? (portfolioValidation.errors || [])[0] : portfolioValidation.validation?.valid ? `Valid \u2014 ${portfolioValidation.validation.stats?.query_count || 0} queries` : (portfolioValidation.errors || portfolioValidation.validation?.errors || []).slice(0, 2).join('; ')}</span>}</div>
+            <div className="flex items-center gap-2"><DarkButton variant="primary" onClick={() => void onValidatePortfolio()} disabled={!portfolioJson.trim()}>Validate</DarkButton>{portfolioValidation && <span className={`text-xs font-medium ${portfolioValidation.status === 'error' ? 'text-[var(--accent-danger)]' : 'text-[var(--accent-success)]'}`}>{portfolioValidation.status === 'error' ? (portfolioValidation.errors || [])[0] : portfolioValidation.validation?.valid ? `Valid - ${portfolioValidation.validation.stats?.query_count || 0} queries` : (portfolioValidation.errors || portfolioValidation.validation?.errors || []).slice(0, 2).join('; ')}</span>}</div>
           </div>
         )}
 
@@ -270,6 +270,8 @@ export function RefreshPanel({ brand: defaultBrand, market: defaultMarket }: { b
           <label className={labelCls}>Queries/topic<input type="number" min={1} max={20} className={inputCls + ' mt-1'} value={queriesPerTopic} onChange={(e) => setQueriesPerTopic(Number(e.target.value))} /></label>
           <label className={labelCls}>Query limit<input type="number" min={1} max={100} className={inputCls + ' mt-1'} value={queryLimit} onChange={(e) => setQueryLimit(Number(e.target.value))} /></label>
           <label className={labelCls}>Language<input className={inputCls + ' mt-1'} value={language} onChange={(e) => setLanguage(e.target.value)} /></label>
+          <label className={labelCls}>Max owned URLs to audit<input type="number" min={1} max={500} className={inputCls + ' mt-1'} value={maxOwnedInventoryUrls} onChange={(e) => setMaxOwnedInventoryUrls(Number(e.target.value))} /><span className="mt-1 block text-xs text-[var(--text-muted)]">Site-level inventory sample from sitemap. These pages are crawled and GEO scored even if not mapped to a query.</span></label>
+          <label className={labelCls}>Max external URLs crawled<input type="number" min={1} max={500} className={inputCls + ' mt-1'} value={maxExternalUrls} onChange={(e) => setMaxExternalUrls(Number(e.target.value))} /><span className="mt-1 block text-xs text-[var(--text-muted)]">Caps deduped external citation pages. 150 supports 50 queries × 3 citations.</span></label>
         </div>
 
         <div className="mt-3 grid gap-2 md:grid-cols-4">

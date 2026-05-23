@@ -297,8 +297,11 @@ export default function App() {
                   {refreshStatus?.active ? 'Refresh running' : 'Idle'}
                 </span>
               </div>
-              {refreshStatus?.active && refreshStatus.stage && (
+              {refreshStatus?.stage && (
                 <p className="mt-2 text-[11px] text-[var(--text-muted)]">{niceStage(refreshStatus.stage)}</p>
+              )}
+              {refreshStatus?.runId && (
+                <p className="mt-1 text-[10px] font-mono text-[var(--text-muted)] break-all">{refreshStatus.runId}</p>
               )}
             </div>
 
@@ -306,8 +309,11 @@ export default function App() {
             <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-panel)] p-3">
               <p className="typo-meta text-[var(--text-muted)] mb-2">Workflow State</p>
               <p className="text-xs text-[var(--text-secondary)]">
-                {refreshStatus?.stage ? niceStage(refreshStatus.stage) : 'No active workflow'}
+                {refreshStatus?.active && refreshStatus?.stage ? niceStage(refreshStatus.stage) : refreshStatus?.stage ? niceStage(refreshStatus.stage) : 'No active workflow'}
               </p>
+              {refreshStatus?.latestSuccessfulRunId && (
+                <p className="mt-2 text-[10px] text-[var(--text-muted)]">Last success: <span className="font-mono">{refreshStatus.latestSuccessfulRunId}</span></p>
+              )}
             </div>
 
             {/* Latest successful run */}
